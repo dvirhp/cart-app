@@ -1,0 +1,14 @@
+{
+  "name": "cart-api",
+  "version": "0.1.0",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js",
+    "test:mongo": "node test-mongo.js"
+  },
+  "dependencies": {
+    "nodemailer": "^7.0.5"
+  }
+}
