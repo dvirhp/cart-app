@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, Button, Platform, Alert } from 'react-native';
+import { View, Text, TextInput, Button, Platform, Alert, StyleSheet } from 'react-native';
 import { verifyEmail, resendCode } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext'; // ⬅️ חיבור ל־Theme
 
 // Helper function for cross-platform alerts
 const show = (title, message) =>
@@ -10,22 +11,20 @@ const show = (title, message) =>
 export default function VerifyEmailScreen({ route, navigation }) {
   const { email: initialEmail } = route.params || {};
   const { signIn } = useAuth();
+  const { theme } = useTheme(); // ⬅️ שולפים theme
 
   const [email, setEmail] = useState(initialEmail || '');
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
 
   const onVerify = async () => {
-    // Basic validation
     if (!email || code.length !== 6) {
       return show('Error', 'Please enter an email and a 6-digit code');
     }
 
     try {
       setLoading(true);
-      // Verify code with backend
       const data = await verifyEmail(email.trim(), code.trim());
-      // Backend should return token + user → sign-in
       await signIn(data);
     } catch (e) {
       const msg = e?.response?.data?.error || 'Verification failed';
@@ -48,8 +47,8 @@ export default function VerifyEmailScreen({ route, navigation }) {
   };
 
   return (
-    <View style={{ flex: 1, padding: 24, justifyContent: 'center', gap: 12 }}>
-      <Text style={{ fontSize: 24, fontWeight: '600', marginBottom: 8 }}>Verify Email</Text>
+    <View style={[styles.container, theme.container]}>
+      <Text style={[styles.title, theme.text]}>Verify Email</Text>
 
       {/* Email input */}
       <TextInput
@@ -58,7 +57,8 @@ export default function VerifyEmailScreen({ route, navigation }) {
         autoCapitalize="none"
         keyboardType="email-address"
         placeholder="Email"
-        style={{ borderWidth: 1, borderRadius: 8, padding: 12 }}
+        placeholderTextColor={theme.text.color === '#fff' ? '#aaa' : '#555'}
+        style={[styles.input, { color: theme.text.color, borderColor: '#ccc' }]}
       />
 
       {/* 6-digit code input */}
@@ -67,8 +67,9 @@ export default function VerifyEmailScreen({ route, navigation }) {
         onChangeText={setCode}
         keyboardType="number-pad"
         placeholder="6-digit code"
+        placeholderTextColor={theme.text.color === '#fff' ? '#aaa' : '#555'}
         maxLength={6}
-        style={{ borderWidth: 1, borderRadius: 8, padding: 12 }}
+        style={[styles.input, { color: theme.text.color, borderColor: '#ccc' }]}
       />
 
       {/* Verify button */}
@@ -86,3 +87,9 @@ export default function VerifyEmailScreen({ route, navigation }) {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, padding: 24, justifyContent: 'center', gap: 12 },
+  title: { fontSize: 24, fontWeight: '600', marginBottom: 8 },
+  input: { borderWidth: 1, borderRadius: 8, padding: 12, marginBottom: 12 },
+});

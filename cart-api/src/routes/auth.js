@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const User = require('../models/User');
 const { sendMail } = require('../utils/mailer');
+const requireAuth = require('../middleware/requireAuth');
 
 // Sign JWT token for authenticated users
 function sign(user) {
@@ -28,31 +29,61 @@ const validate = (req, res) => {
 // REGISTER – creates user with verification code and sends email (no token returned)
 router.post(
   '/register',
-  body('email').isEmail(),
-  body('password').isLength({ min: 6 }),
-  body('displayName').isLength({ min: 2 }),
+  body('email').isEmail().withMessage('Invalid email format'),
+  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+  body('firstName').isLength({ min: 2 }).withMessage('First name must be at least 2 characters'),
+  body('lastName').isLength({ min: 2 }).withMessage('Last name must be at least 2 characters'),
+  body('birthDate')
+    .isISO8601().withMessage('Birth date must be a valid date')
+    .custom((value) => {
+      if (new Date(value) > new Date()) {
+        throw new Error('Birth date cannot be in the future');
+      }
+      return true;
+    }),
+  body('phone')
+    .matches(/^[0-9]{9,15}$/)
+    .withMessage('Phone must contain only 9–15 digits'),
+  body('address')
+    .optional()
+    .isLength({ min: 5 })
+    .withMessage('Address must be at least 5 characters if provided'),
   async (req, res) => {
-    validate(req, res);
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      // נחזיר את כל השגיאות כדי שיהיה ברור למשתמש
+      return res.status(400).json({ errors: errors.array() });
+    }
 
-    const { email, password, displayName } = req.body;
+    const { email, password, firstName, lastName, birthDate, phone, address } = req.body;
+    const displayName = `${firstName} ${lastName}`;
+
+    // בדיקה אם המייל כבר קיים
     const exists = await User.findOne({ email });
     if (exists) return res.status(409).json({ error: 'Email already in use' });
 
+    // הצפנת סיסמה
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // 10-minute verification code
+    // קוד אימות 6 ספרות
     const code = genCode6();
     const user = await User.create({
       email,
       displayName,
+      firstName,
+      lastName,
+      birthDate,
+      phone,
+      address: address || null,
       passwordHash,
       verifyCodeHash: hashCode(code),
       verifyCodeExpiresAt: new Date(Date.now() + 10 * 60 * 1000),
       verifyCodeAttempts: 0
     });
+
     console.log("📩 REGISTER verification code for", email, "is:", code);
 
-    // Send verification email
+    // שליחת מייל
     const html = `
       <div style="font-family:sans-serif;">
         <h2>Account verification – Cart</h2>
@@ -69,7 +100,6 @@ router.post(
       });
     } catch (e) {
       console.error('MAIL ERROR:', e.message);
-      // User can still use resend option
     }
 
     return res.status(201).json({ verifyRequired: true, email });
@@ -90,7 +120,6 @@ router.post('/login',
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
 
-    // Require verification before issuing token
     if (!user.emailVerifiedAt) {
       return res.status(403).json({ error: 'Email not verified', verifyRequired: true, email });
     }
@@ -108,18 +137,16 @@ router.post('/verify',
     validate(req, res);
 
     const { email, code } = req.body;
-        console.log("📥 VERIFY attempt for", email, "entered code:", code);
+    console.log("📥 VERIFY attempt for", email, "entered code:", code);
 
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    // If already verified, issue token immediately
     if (user.emailVerifiedAt) {
       const token = sign(user);
       return res.json({ token, user: user.toJSON() });
     }
 
-    // Check code validity and attempts
     if (!user.verifyCodeHash || !user.verifyCodeExpiresAt || user.verifyCodeExpiresAt < new Date()) {
       return res.status(400).json({ error: 'Code expired. Please resend.' });
     }
@@ -133,7 +160,6 @@ router.post('/verify',
       return res.status(400).json({ error: 'Invalid code' });
     }
 
-    // Mark user as verified
     user.emailVerifiedAt = new Date();
     user.verifyCodeHash = null;
     user.verifyCodeExpiresAt = null;
@@ -177,9 +203,40 @@ router.post('/resend',
 );
 
 // Returns the currently logged-in user
-router.get('/me', require('../middleware/requireAuth'), async (req, res) => {
+router.get('/me', requireAuth, async (req, res) => {
   const user = await User.findById(req.user.id);
   return res.json({ user: user.toJSON() });
 });
+
+// UPDATE – allow user to update profile info
+router.put('/me/update',
+  requireAuth,
+  body('firstName').optional().isLength({ min: 2 }),
+  body('lastName').optional().isLength({ min: 2 }),
+  body('birthDate').optional().isISO8601(),
+  body('phone').optional(),
+  body('address').optional(),
+  async (req, res) => {
+    const { firstName, lastName, birthDate, phone, address } = req.body;
+
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    if (firstName !== undefined) user.firstName = firstName;
+    if (lastName  !== undefined) user.lastName  = lastName;
+    if (birthDate !== undefined) user.birthDate = birthDate;
+    if (phone     !== undefined) user.phone     = phone;
+    if (address   !== undefined) user.address   = address;
+
+    if (firstName || lastName) {
+      user.displayName = `${user.firstName} ${user.lastName}`;
+    }
+
+    await user.save();
+    return res.json({ message: 'Profile updated successfully', user: user.toJSON() });
+  }
+);
+
+
 
 module.exports = router;
