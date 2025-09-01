@@ -1,57 +1,36 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../context/ThemeContext';
 
 import SettingsScreen from './setting/SettingsScreen';
-import FamilyPage from './setting/familyScreens/FamilyPage';
-import JoinFamilyPage from './setting/familyScreens/JoinFamilyPage';
 import AccountManagerScreen from './setting/AccountManagerScreen';
 import NotificationsScreen from './setting/NotificationsScreen';
 import HelpScreen from './setting/HelpScreen';
 import AboutScreen from './setting/AboutScreen';
+import ChangePasswordScreen from './setting/ChangePasswordScreen';
 
-// ---- navigators ----
+import FamilyStack from '../navigation/FamilyStack';
+
 const Tab = createBottomTabNavigator();
 const AccountStack = createNativeStackNavigator();
 
 // ---- dummy tabs ----
 function HomeScreen() {
   const { theme } = useTheme();
-  return (
-    <View style={[styles.screen, theme.container]}>
-      <Text style={[styles.title, theme.text]}>🏠 Welcome Home!</Text>
-    </View>
-  );
+  return <View style={[styles.screen, theme.container]} />;
 }
 
 function CategoriesScreen() {
   const { theme } = useTheme();
-  return (
-    <View style={[styles.screen, theme.container]}>
-      <Text style={theme.text}>Categories Page</Text>
-    </View>
-  );
-}
-
-function SearchScreen() {
-  const { theme } = useTheme();
-  return (
-    <View style={[styles.screen, theme.container]}>
-      <Text style={theme.text}>Search Page</Text>
-    </View>
-  );
+  return <View style={[styles.screen, theme.container]} />;
 }
 
 function CartScreen() {
   const { theme } = useTheme();
-  return (
-    <View style={[styles.screen, theme.container]}>
-      <Text style={theme.text}>Cart Page</Text>
-    </View>
-  );
+  return <View style={[styles.screen, theme.container]} />;
 }
 
 // ---- Settings stack (nested) ----
@@ -61,19 +40,18 @@ function AccountNavigator() {
   return (
     <AccountStack.Navigator
       initialRouteName="SettingsHome"
-      screenOptions={{
-        headerShown: false,
-        // שומר על רקע אחיד (דארק/לייט) בכל מסכי ה‑stack
-        contentStyle: theme.container,
-      }}
+      screenOptions={{ headerShown: false, contentStyle: theme.container }}
     >
       <AccountStack.Screen name="SettingsHome" component={SettingsScreen} />
       <AccountStack.Screen name="AccountManager" component={AccountManagerScreen} />
-      <AccountStack.Screen name="Family" component={FamilyPage} />
-      <AccountStack.Screen name="JoinFamily" component={JoinFamilyPage} />
       <AccountStack.Screen name="Notifications" component={NotificationsScreen} />
       <AccountStack.Screen name="Help" component={HelpScreen} />
       <AccountStack.Screen name="About" component={AboutScreen} />
+      <AccountStack.Screen
+        name="ChangePassword"
+        component={ChangePasswordScreen}
+        options={{ title: 'Change Password' }}
+      />
     </AccountStack.Navigator>
   );
 }
@@ -95,48 +73,65 @@ export default function MainApp() {
         tabBarInactiveTintColor: darkMode ? '#aaa' : '#666',
       }}
     >
+      {/* שמאל 1 */}
       <Tab.Screen
         name="Home"
         component={HomeScreen}
         options={{
-          tabBarIcon: ({ color }) => <Icon name="home-outline" size={22} color={color} />,
+          title: 'Home',
+          tabBarIcon: ({ color, size = 22 }) => (
+            <Icon name="home-outline" size={size} color={color} />
+          ),
         }}
       />
 
+      {/* שמאל 2 */}
       <Tab.Screen
         name="Categories"
         component={CategoriesScreen}
         options={{
-          tabBarIcon: ({ color }) => <Icon name="grid-outline" size={22} color={color} />,
+          title: 'Categories',
+          tabBarIcon: ({ color, size = 22 }) => (
+            <Icon name="grid-outline" size={size} color={color} />
+          ),
         }}
       />
 
+      {/* אמצע – עגלת קניות עם אייקון */}
       <Tab.Screen
         name="Cart"
         component={CartScreen}
         options={{
           tabBarLabel: '',
-          tabBarIcon: () => (
-            <View style={styles.cartButton}>
-              <Text style={{ color: 'white', fontWeight: 'bold' }}>Cart</Text>
+          tabBarIcon: ({ focused }) => (
+            <View style={[styles.cartButton, focused && styles.cartButtonFocused]}>
+              <Icon name="cart-outline" size={24} color="#fff" />
             </View>
           ),
         }}
       />
 
+      {/* ימין 1 – Families (במקום Search) */}
       <Tab.Screen
-        name="Search"
-        component={SearchScreen}
+        name="Families"
+        component={FamilyStack}
         options={{
-          tabBarIcon: ({ color }) => <Icon name="search-outline" size={22} color={color} />,
+          title: 'Families',
+          tabBarIcon: ({ color, size = 22 }) => (
+            <Icon name="people-outline" size={size} color={color} />
+          ),
         }}
       />
 
+      {/* ימין 2 – Settings */}
       <Tab.Screen
         name="Settings"
         component={AccountNavigator}
         options={{
-          tabBarIcon: ({ color }) => <Icon name="settings-outline" size={22} color={color} />,
+          title: 'Settings',
+          tabBarIcon: ({ color, size = 22 }) => (
+            <Icon name="settings-outline" size={size} color={color} />
+          ),
         }}
       />
     </Tab.Navigator>
@@ -145,13 +140,17 @@ export default function MainApp() {
 
 // ---- styles ----
 const styles = StyleSheet.create({
-  screen: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  title: { fontSize: 24, fontWeight: 'bold' },
+  screen: { flex: 1 },
   cartButton: {
     backgroundColor: 'green',
     borderRadius: 35,
     paddingHorizontal: 20,
     paddingVertical: 14,
     marginBottom: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cartButtonFocused: {
+    transform: [{ scale: 1.05 }],
   },
 });

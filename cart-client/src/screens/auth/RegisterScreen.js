@@ -6,6 +6,7 @@ import {
 import { register } from '../../api/client';
 import { useTheme } from '../../context/ThemeContext';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { Picker } from '@react-native-picker/picker';
 
 const DatePicker = ({ date, setDate }) => {
   const [show, setShow] = useState(false);
@@ -14,8 +15,11 @@ const DatePicker = ({ date, setDate }) => {
     return (
       <input
         type="date"
-        value={date.toISOString().split('T')[0]}
-        onChange={(e) => setDate(new Date(e.target.value))}
+        value={date ? date.toISOString().split('T')[0] : ''}
+        onChange={(e) => {
+          const value = e.target.value;
+          if (value) setDate(new Date(value));
+        }}
         style={{
           padding: 12,
           borderRadius: 8,
@@ -31,15 +35,20 @@ const DatePicker = ({ date, setDate }) => {
   return (
     <View style={{ marginBottom: 12 }}>
       <Button title="Select Birth Date" onPress={() => setShow(true)} />
-      <Text style={{ marginTop: 8 }}>Selected: {date.toDateString()}</Text>
+      <Text style={{ marginTop: 8 }}>
+        Selected: {date instanceof Date ? date.toDateString() : 'No date selected'}
+      </Text>
+
       {show && (
         <DateTimePicker
-          value={date}
+          value={date instanceof Date ? date : new Date()}
           mode="date"
           display="default"
           onChange={(event, selectedDate) => {
             setShow(false);
-            if (selectedDate) setDate(selectedDate);
+            if (event.type === 'dismissed') return;
+            if (!selectedDate) return;
+            setDate(new Date(selectedDate));
           }}
         />
       )}
@@ -59,6 +68,7 @@ export default function RegisterScreen({ navigation }) {
   const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
+  const [gender, setGender] = useState('other'); // 👈 gender state
   const [birthDate, setBirthDate] = useState(new Date());
 
   const [loading, setLoading] = useState(false);
@@ -87,7 +97,7 @@ export default function RegisterScreen({ navigation }) {
     try {
       setLoading(true);
 
-      const formattedDate = birthDate.toISOString().split('T')[0]; // ⬅️ תמיד פורמט YYYY-MM-DD
+      const formattedDate = birthDate.toISOString().split('T')[0];
 
       const res = await register({
         email: email.trim(),
@@ -97,6 +107,7 @@ export default function RegisterScreen({ navigation }) {
         birthDate: formattedDate,
         phone: phone.trim(),
         address: address.trim(),
+        gender, // 👈 נשלח לשרת
       });
 
       if (res?.verifyRequired) {
@@ -108,7 +119,6 @@ export default function RegisterScreen({ navigation }) {
       showAlert('Registered', 'You can now log in with your credentials');
       navigation.replace('Login');
     } catch (e) {
-      // אם זה validation של השרת
       if (e?.response?.data?.errors) {
         const serverErrors = e.response.data.errors.map(err => `${err.path}: ${err.msg}`).join('\n');
         setInlineError(serverErrors);
@@ -156,6 +166,18 @@ export default function RegisterScreen({ navigation }) {
           style={[styles.input, { color: theme.text.color }]}
         />
 
+        {/* Gender */}
+        <Text style={[styles.label, theme.text]}>Gender</Text>
+        <Picker
+          selectedValue={gender}
+          onValueChange={(value) => setGender(value)}
+          style={{ marginBottom: 12 }}
+        >
+          <Picker.Item label="Male" value="male" />
+          <Picker.Item label="Female" value="female" />
+          <Picker.Item label="Other" value="other" />
+        </Picker>
+
         {/* Email */}
         <Text style={[styles.label, theme.text]}>
           Email <Text style={styles.required}>*</Text>
@@ -196,7 +218,7 @@ export default function RegisterScreen({ navigation }) {
           style={[styles.input, { color: theme.text.color }]}
         />
 
-        {/* Address */}
+        {/* Address (optional) */}
         <Text style={[styles.label, theme.text]}>Address</Text>
         <TextInput
           value={address}

@@ -1,34 +1,84 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   View, Text, StyleSheet, TouchableOpacity, 
-  Image, Switch, SafeAreaView, ScrollView 
+  Image, Switch, SafeAreaView, ScrollView, Alert, Platform 
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext'; 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BASE_URL } from '../../api/client';
 
 export default function SettingsScreen({ navigation }) {
-  const { user, signOut } = useAuth();
-  const [avatar, setAvatar] = useState(null);
+  const { user, token, updateUser, signOut } = useAuth(); 
   const { darkMode, toggleDarkMode, theme } = useTheme();
   const insets = useSafeAreaInsets();
 
-  // Pick new image from gallery
+  // local avatar state (for instant preview)
+  const [avatar, setAvatar] = useState(user?.avatar || null);
+
+  // ✅ sync avatar with context whenever user.avatar changes
+  useEffect(() => {
+    setAvatar(user?.avatar || null);
+  }, [user?.avatar]);
+
   const pickImage = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
+    const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
       quality: 1,
     });
+
     if (!result.canceled) {
-      setAvatar(result.assets[0].uri);
+      const uri = result.assets[0].uri;
+      setAvatar(uri); // immediate preview
+
+      try {
+        const formData = new FormData();
+
+        if (Platform.OS === 'web') {
+          const response = await fetch(uri);
+          const blob = await response.blob();
+          formData.append('avatar', blob, 'avatar.jpg');
+        } else {
+          formData.append('avatar', {
+            uri: Platform.OS === 'ios' ? uri.replace('file://', '') : uri,
+            type: 'image/jpeg',
+            name: 'avatar.jpg',
+          });
+        }
+
+        const res = await fetch(`${BASE_URL}/api/v1/auth/upload-avatar`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` }, 
+          body: formData,
+        });
+
+        const text = await res.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          console.error("❌ Server returned non-JSON:", text);
+          throw new Error("Invalid server response");
+        }
+
+        if (data?.user) {
+          updateUser(data.user); // update context
+          Alert.alert('✅ Success', 'Profile picture updated');
+        } else {
+          console.error("❌ Upload error:", data);
+          Alert.alert('Error', data?.error || 'Upload failed');
+        }
+      } catch (err) {
+        console.error("❌ Avatar upload failed:", err);
+        Alert.alert('Error', 'Failed to update profile picture');
+      }
     }
   };
 
-  // Helper component for menu item
   const MenuItem = ({ icon, label, onPress }) => (
     <TouchableOpacity style={styles.menuItem} onPress={onPress}>
       <Icon name={icon} size={22} color={theme.text.color} style={{ marginRight: 12 }} />
@@ -66,9 +116,8 @@ export default function SettingsScreen({ navigation }) {
           <MenuItem 
             icon="person-outline" 
             label="Account Manager" 
-            onPress={() => navigation.navigate('AccountManager')} // ✅ שינוי לשם החדש
+            onPress={() => navigation.navigate('AccountManager')}
           />
-          <MenuItem icon="people-outline" label="Family" onPress={() => navigation.navigate('Family')} />
           <MenuItem icon="notifications-outline" label="Notifications" onPress={() => navigation.navigate('Notifications')} />
           <MenuItem icon="help-circle-outline" label="Help" onPress={() => navigation.navigate('Help')} />
           <MenuItem icon="information-circle-outline" label="About" onPress={() => navigation.navigate('About')} />
@@ -88,7 +137,6 @@ export default function SettingsScreen({ navigation }) {
   );
 }
 
-// Styles
 const styles = StyleSheet.create({
   container: { flex: 1 },
   profileSection: { alignItems: 'center', paddingVertical: 24 },

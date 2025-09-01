@@ -1,35 +1,96 @@
-const API_BASE = "http://localhost:3000/api/v1"; // Update if server runs elsewhere
+const API_BASE = "http://localhost:3000/api/v1";
 
-// Send invite to join a family
-export async function sendInvite(familyId, email, token) {
-  const res = await fetch(`${API_BASE}/families/${familyId}/invite`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${token}`
-    },
-    body: JSON.stringify({ email })
+export async function listFamilies(token) {
+  const r = await fetch(`${API_BASE}/families`, {
+    headers: { Authorization: `Bearer ${token}` }
   });
-  return res.json();
+  return r.json();
 }
 
-// Join a family using an invite code
-export async function joinFamily(code, token) {
-  const res = await fetch(`${API_BASE}/families/join`, {
-    method: "POST",
+export async function createFamily(name, token) {
+  const r = await fetch(`${API_BASE}/families`, {
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${token}`
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ name })
+  });
+  return r.json();
+}
+
+export async function getFamily(familyId, token) {
+  const r = await fetch(`${API_BASE}/families/${familyId}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return r.json();
+}
+
+export async function joinByCode(code, token) {
+  const r = await fetch(`${API_BASE}/families/join-by-code`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`
     },
     body: JSON.stringify({ code })
   });
-  return res.json();
+  return r.json();
 }
 
-// Get family details
-export async function getFamily(familyId, token) {
-  const res = await fetch(`${API_BASE}/families/${familyId}`, {
-    headers: { "Authorization": `Bearer ${token}` }
+export async function leaveFamily(familyId, token) {
+  const r = await fetch(`${API_BASE}/families/${familyId}/leave`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` }
   });
-  return res.json();
+  return r.json();
+}
+
+export async function deleteFamily(familyId, token) {
+  const r = await fetch(`${API_BASE}/families/${familyId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return r.json();
+}
+
+/* ---------- NEW: Update description ---------- */
+export async function updateFamilyDescription(familyId, description, token) {
+  const r = await fetch(`${API_BASE}/families/${familyId}/description`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ description })
+  });
+  return r.json();
+}
+
+/* ---------- NEW: Update avatar ---------- */
+export async function updateFamilyAvatar(familyId, file, token) {
+  const formData = new FormData();
+  formData.append('avatar', file);
+
+  const r = await fetch(`${API_BASE}/families/${familyId}/avatar`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData
+  });
+  return r.json();
+}
+
+export async function getFamilyCart(familyId, token) {
+  const r = await fetch(`${API_BASE}/families/${familyId}/cart`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return r.json();
+}
+
+export async function removeMember(familyId, userId, token) {
+  const r = await fetch(`${API_BASE}/families/${familyId}/members/${userId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return r.json();
 }

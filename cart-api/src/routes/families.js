@@ -1,77 +1,296 @@
-const express = require("express");
+const express = require('express');
+const { nanoid } = require('nanoid');
+const multer = require('multer');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const { v2: cloudinary } = require('cloudinary');
+
+const Family = require('../models/Family');
+const Membership = require('../models/Membership');
+const Cart = require('../models/Cart');
+const requireAuth = require('../middleware/requireAuth');
+const { requireFamilyRole } = require('../middleware/requireFamilyRole');
+
 const router = express.Router();
-const requireAuth = require("../middleware/requireAuth"); // Auth middleware
-const Invite = require("../models/Invite");
-const Family = require("../models/Family");
-const User = require("../models/User");
-const { sendMail } = require("../utils/mailer");
-const crypto = require("crypto");
 
-/**
- * Send invitation email to join family
- */
-router.post("/:id/invite", requireAuth, async (req, res) => {
-  try {
-    const { email } = req.body;
-    const family = await Family.findById(req.params.id);
-    if (!family) return res.status(404).json({ error: "Family not found" });
-
-    const code = crypto.randomBytes(3).toString("hex"); // Short invite code
-    const invite = await Invite.create({
-      familyId: family._id,
-      email,
-      code,
-      expiresAt: new Date(Date.now() + 1000 * 60 * 60), // Expires after 1 hour
-    });
-
-    // Send invitation email
-    await sendMail({
-      to: email,
-      subject: "Cart – Family Invitation",
-      html: `<p>You have been invited to join the family <b>${family.name}</b></p>
-             <p>Your invitation code: <b>${code}</b></p>
-             <p>The code is valid for one hour only.</p>`,
-    });
-
-    res.json({ message: "Invitation sent", inviteId: invite._id });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
-  }
+/* ---------------- CLOUDINARY CONFIG ---------------- */
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-/**
- * Accept invitation using code
- */
-router.post("/join", requireAuth, async (req, res) => {
+/* ---------------- MULTER STORAGE ---------------- */
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: 'cart-app/families',
+    allowed_formats: ['jpg', 'jpeg', 'png'],
+    transformation: [{ width: 300, height: 300, crop: 'fill' }],
+  },
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
+  fileFilter: (req, file, cb) => {
+    if (!/image\/(jpe?g|png)/.test(file.mimetype)) {
+      return cb(new Error('Only JPG/PNG images allowed'), false);
+    }
+    cb(null, true);
+  },
+});
+
+/* ---------------- CREATE FAMILY ---------------- */
+router.post('/', requireAuth, upload.single('avatar'), async (req, res, next) => {
   try {
-    const { code } = req.body;
-    const invite = await Invite.findOne({
-      code,
-      used: false,
-      expiresAt: { $gt: new Date() },
-    });
-    if (!invite) return res.status(400).json({ error: "Invalid or expired invite" });
+    console.log("📥 Family create request body:", req.body);
+    console.log("📂 File received:", req.file);
 
-    const family = await Family.findById(invite.familyId);
-    if (!family) return res.status(404).json({ error: "Family not found" });
-
-    // Add user to the family if not already a member
-    if (!family.members.includes(req.user.id)) {
-      family.members.push(req.user.id);
-      await family.save();
-      await User.findByIdAndUpdate(req.user.id, { familyId: family._id });
+    const { name, description } = req.body;
+    if (!name?.trim()) {
+      return res.status(400).json({ error: 'Family name is required' });
     }
 
-    // Mark invite as used
-    invite.used = true;
-    await invite.save();
+    let avatarUrl = null;
+    if (req.file) {
+      avatarUrl = req.file.path; // Cloudinary מחזיר URL
+      console.log("✅ Uploaded to Cloudinary:", avatarUrl);
+    }
 
-    res.json({ message: "Joined family successfully", family });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
+    const joinCode = nanoid(8);
+
+    const family = await Family.create({
+      name: name.trim(),
+      description: description?.trim() || '',
+      avatar: avatarUrl,
+      owner: req.user.id,
+      joinCode,
+    });
+
+    await Membership.create({
+      user: req.user.id,
+      family: family._id,
+      role: 'owner',
+      status: 'active',
+    });
+
+    await Cart.create({ family: family._id, items: [] });
+
+    res.status(201).json({ family });
+  } catch (e) {
+    console.error("❌ Create family error:", e);
+    next(e);
   }
 });
+
+/* ---------------- UPDATE FAMILY AVATAR ---------------- */
+router.put('/:id/avatar', requireAuth, requireFamilyRole('owner'), upload.single('avatar'), async (req, res) => {
+  try {
+    console.log("📥 Family avatar update hit for family:", req.params.id);
+    console.log("📂 File received:", req.file);
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const family = await Family.findById(req.params.id);
+    if (!family) {
+      return res.status(404).json({ error: 'Family not found' });
+    }
+
+    family.avatar = req.file.path; // Cloudinary URL
+    await family.save();
+
+    return res.json({ message: 'Family avatar updated', family });
+  } catch (err) {
+    console.error("❌ Family avatar update error:", err);
+    return res.status(500).json({ error: 'Server error', details: err.message });
+  }
+});
+
+/* ---------------- LIST FAMILIES ---------------- */
+router.get('/', requireAuth, async (req, res, next) => {
+  try {
+    console.log("📥 Families list requested by user:", req.user.id);
+
+    const memberships = await Membership.find({
+      user: req.user.id,
+      status: 'active',
+    }).populate('family');
+
+    console.log("📂 Raw memberships:", JSON.stringify(memberships, null, 2));
+
+    const families = memberships
+      .filter((m) => !!m.family)
+      .map((m) => ({
+        _id: m.family._id,
+        name: m.family.name,
+        description: m.family.description || '',
+        avatar: m.family.avatar || null,
+        owner: m.family.owner,
+        joinCode: m.family.joinCode,
+        role: m.role,
+      }));
+
+    console.log("✅ Families response:", families);
+
+    res.json({ families });
+  } catch (e) {
+    console.error("❌ Error in /families:", e);
+    next(e);
+  }
+});
+
+/* ---------------- FAMILY DETAILS ---------------- */
+router.get('/:id', requireAuth, requireFamilyRole('member'), async (req, res, next) => {
+  try {
+    const family = await Family.findById(req.params.id).lean();
+    if (!family) {
+      return res.status(404).json({ error: 'Family not found' });
+    }
+
+    const members = await Membership.find({
+      family: family._id,
+      status: 'active',
+    })
+      .populate('user', 'email _id avatar displayName') // 👈 נמשוך גם avatar וגם displayName
+      .lean();
+
+    res.json({
+      _id: family._id,
+      name: family.name,
+      description: family.description || '',
+      avatar: family.avatar || null,
+      owner: family.owner,
+      joinCode: family.joinCode,
+      members: members.map((m) => ({
+        _id: m.user._id,
+        email: m.user.email,
+        displayName: m.user.displayName || null,
+        avatar: m.user.avatar || null,   // 👈 כאן הוספתי
+        role: m.role,
+      })),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+
+/* ---------------- JOIN BY CODE ---------------- */
+router.post('/join-by-code', requireAuth, async (req, res, next) => {
+  try {
+    const { code } = req.body;
+    if (!code?.trim()) {
+      return res.status(400).json({ error: 'Join code is required' });
+    }
+
+    const family = await Family.findOne({ joinCode: code.trim() });
+    if (!family) {
+      return res.status(400).json({ error: 'Invalid join code' });
+    }
+
+    await Membership.updateOne(
+      { user: req.user.id, family: family._id },
+      { $setOnInsert: { role: 'member', status: 'active' } },
+      { upsert: true }
+    );
+
+    res.json({
+      message: 'Joined family successfully',
+      familyId: family._id,
+      family: {
+        _id: family._id,
+        name: family.name,
+        description: family.description || '',
+        avatar: family.avatar || null,
+        joinCode: family.joinCode,
+      },
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/* ---------------- LEAVE FAMILY ---------------- */
+router.post('/:id/leave', requireAuth, requireFamilyRole('member'), async (req, res, next) => {
+  try {
+    const family = await Family.findById(req.params.id);
+    if (!family) {
+      return res.status(404).json({ error: 'Family not found' });
+    }
+
+    if (String(family.owner) === req.user.id) {
+      return res
+        .status(400)
+        .json({ error: 'Owner cannot leave; delete the family instead' });
+    }
+
+    await Membership.updateOne(
+      { user: req.user.id, family: family._id },
+      { $set: { status: 'removed' } }
+    );
+
+    res.json({ message: 'Left family successfully' });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/* ---------------- DELETE FAMILY ---------------- */
+router.delete('/:id', requireAuth, requireFamilyRole('owner'), async (req, res, next) => {
+  try {
+    const familyId = req.params.id;
+
+    await Membership.deleteMany({ family: familyId });
+    await Cart.deleteOne({ family: familyId });
+    await Family.deleteOne({ _id: familyId });
+
+    res.json({ message: 'Family deleted successfully' });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/* ---------------- UPDATE FAMILY DESCRIPTION ---------------- */
+router.put('/:id/description', requireAuth, requireFamilyRole('member'), async (req, res) => {
+  try {
+    const { description } = req.body;
+
+    const family = await Family.findById(req.params.id);
+    if (!family) {
+      return res.status(404).json({ error: 'Family not found' });
+    }
+
+    family.description = description?.trim() || '';
+    await family.save();
+
+    res.json({ message: 'Family description updated', family });
+  } catch (err) {
+    console.error("❌ Family description update error:", err);
+    res.status(500).json({ error: 'Server error', details: err.message });
+  }
+});
+
+// Remove member (only owner)
+router.delete('/:id/members/:userId', requireAuth, requireFamilyRole('owner'), async (req, res, next) => {
+  try {
+    const { id, userId } = req.params;
+    if (String(req.user.id) === String(userId)) {
+      return res.status(400).json({ error: 'Owner cannot remove themselves' });
+    }
+
+    const membership = await Membership.findOne({ family: id, user: userId });
+    if (!membership) {
+      return res.status(404).json({ error: 'Member not found' });
+    }
+
+    await membership.deleteOne();
+    res.json({ message: 'Member removed successfully' });
+  } catch (err) {
+    next(err);
+  }
+});
+
 
 module.exports = router;

@@ -17,7 +17,9 @@ import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
-import { updateProfile } from '../../api/client';
+import { updateProfile, api, BASE_URL } from '../../api/client';
+import { deleteAccount } from '../../api/client';
+
 
 function todayStr() {
   const d = new Date();
@@ -27,19 +29,18 @@ function todayStr() {
 }
 
 export default function AccountManagerScreen({ navigation }) {
-  const { user, token } = useAuth();
+  const { user, token, updateUser, signOut  } = useAuth();
   const { theme } = useTheme();
 
   const [avatar, setAvatar] = useState(user?.avatar || null);
 
-  // נשתמש במחרוזת YYYY-MM-DD ולא באובייקט Date כדי למנוע קריסות ב-web
   const initial = useMemo(() => ({
     firstName: user?.firstName || '',
     lastName:  user?.lastName  || '',
     email:     user?.email     || '',
     phone:     user?.phone     || '',
     address:   user?.address   || '',
-    birthDate: user?.birthDate ? String(user.birthDate).split('T')[0] : '', // "YYYY-MM-DD"
+    birthDate: user?.birthDate ? String(user.birthDate).split('T')[0] : '',
   }), [user]);
 
   const [fields, setFields] = useState(initial);
@@ -52,42 +53,141 @@ export default function AccountManagerScreen({ navigation }) {
     setFields((prev) => ({ ...prev, [field]: value }));
   };
 
+  // ✅ מתוקן – שליחת FormData עם קובץ
   const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 1,
-    });
-    if (!result.canceled) {
-      setAvatar(result.assets[0].uri);
-      // אם תרצה לשמור גם שרתית, נפתח endpoint להעלאת תמונה/URL
-    }
-  };
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    allowsEditing: true,
+    aspect: [1, 1],
+    quality: 1,
+  });
 
-  const isChanged = () => {
-    return (
-      fields.firstName !== original.firstName ||
-      fields.lastName  !== original.lastName  ||
-      fields.email     !== original.email     ||
-      fields.phone     !== original.phone     ||
-      fields.address   !== original.address   ||
-      (fields.birthDate || '') !== (original.birthDate || '')
+  if (!result.canceled) {
+    const uri = result.assets[0].uri;
+    setAvatar(uri); // ✅ show preview immediately
+
+    try {
+      const formData = new FormData();
+
+      if (Platform.OS === 'web') {
+        // 🖥️ Web: convert URI to Blob
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        formData.append('avatar', blob, 'avatar.jpg');
+      } else {
+        // 📱 Mobile: send object with uri + type + name
+        formData.append('avatar', {
+          uri: Platform.OS === 'ios' ? uri.replace('file://', '') : uri,
+          type: 'image/jpeg',
+          name: 'avatar.jpg',
+        });
+      }
+
+      const res = await fetch(`${BASE_URL}/api/v1/auth/upload-avatar`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }, // ❗ no Content-Type
+        body: formData,
+      });
+
+      const text = await res.text(); // debug in case response is not JSON
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        console.error("❌ Server returned non-JSON:", text);
+        throw new Error("Invalid server response");
+      }
+
+      if (data?.user) {
+        updateUser(data.user); // עדכון ה-context
+        setAvatar(data.user.avatar); // שמירת ה-URL שהתקבל מהשרת
+        Alert.alert('✅ Success', 'Profile picture updated');
+      } else {
+        Alert.alert('Error', data?.error || 'Upload failed');
+      }
+    } catch (err) {
+      console.error('❌ Avatar upload failed:', err);
+      Alert.alert('Error', 'Failed to update profile picture');
+    }
+  }
+};
+
+const handleDelete = async () => {
+  if (Platform.OS === 'web') {
+    const confirmed = window.confirm(
+      'Are you sure you want to delete your account? This action cannot be undone.'
     );
-  };
+    if (!confirmed) return;
+
+    try {
+      console.log("🔑 Token before delete request:", token);
+
+      const res = await deleteAccount(token);
+      if (res?.success) {
+        alert('✅ Deleted: Your account has been deleted');
+        await signOut();
+
+      } else {
+        alert('Error: ' + (res?.error || 'Failed to delete account'));
+      }
+    } catch (err) {
+      console.error('❌ Delete error:', err);
+      alert('Server error while deleting account');
+    }
+  } else {
+    Alert.alert(
+      'Delete Account',
+      'Are you sure you want to delete your account? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Yes, Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              console.log("🔑 Token before delete request:", token);
+
+              const res = await deleteAccount(token);
+              if (res?.success) {
+                Alert.alert('✅ Deleted', 'Your account has been deleted');
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: 'Login' }],
+                });
+              } else {
+                Alert.alert('Error', res?.error || 'Failed to delete account');
+              }
+            } catch (err) {
+              console.error('❌ Delete error:', err);
+              Alert.alert('Error', 'Server error while deleting account');
+            }
+          },
+        },
+      ]
+    );
+  }
+};
+
+
+
+  const isChanged = () =>
+    fields.firstName !== original.firstName ||
+    fields.lastName  !== original.lastName  ||
+    fields.email     !== original.email     ||
+    fields.phone     !== original.phone     ||
+    fields.address   !== original.address   ||
+    (fields.birthDate || '') !== (original.birthDate || '');
 
   const handleSave = async () => {
     try {
       setLoading(true);
 
-      // ולידציה בסיסית לתאריך (אם מולא)
       if (fields.birthDate && !/^\d{4}-\d{2}-\d{2}$/.test(fields.birthDate)) {
         Alert.alert('שגיאה', 'תאריך לא תקין. פורמט נדרש: YYYY-MM-DD');
         return;
       }
 
-      const payload = { ...fields }; // birthDate כבר כמחרוזת נכונה
-
+      const payload = { ...fields };
       const res = await updateProfile(token, payload);
 
       if (res?.user) {
@@ -100,25 +200,17 @@ export default function AccountManagerScreen({ navigation }) {
           birthDate: res.user.birthDate ? String(res.user.birthDate).split('T')[0] : '',
         };
         setFields(updated);
-        setOriginal(updated);   // כדי שהכפתור יחזור להיות מנוטרל
-        setEditing({});         // סגירת מצבי עריכה
+        setOriginal(updated);
+        setEditing({});
       }
-      updateUser(res.user); // 👈 יעדכן גם את AuthContext וגם את AsyncStorage
+      updateUser(res.user);
 
-      // פידבק כפול: Alert וגם בנר קטן
-      try { Alert.alert('✅ Success', 'Profile updated successfully'); } catch {}
+      Alert.alert('✅ Success', 'Profile updated successfully');
       setShowSaved(true);
       setTimeout(() => setShowSaved(false), 2000);
-      // באג של "נשמר אבל אחרי Logout זה נעלם" קורה אם אתה קורא לנתיב לא נכון:
-      // וודא שה-API ב-client מצביע על '/auth/me/update' ולא על '/users/me/update'
     } catch (e) {
       console.error('❌ Update error:', e?.response?.data || e.message);
-      const msg =
-        e?.response?.data?.error ||
-        (Array.isArray(e?.response?.data?.errors) &&
-          e.response.data.errors.map((err) => `${err.path}: ${err.msg}`).join('\n')) ||
-        'Update failed';
-      Alert.alert('Error', String(msg));
+      Alert.alert('Error', e?.response?.data?.error || 'Update failed');
     } finally {
       setLoading(false);
     }
@@ -129,10 +221,8 @@ export default function AccountManagerScreen({ navigation }) {
       return (
         <View style={styles.fieldRow} key={field}>
           <Text style={[styles.label, theme.text]}>{label}</Text>
-
-          {/* שורה תצוגתית + עיפרון */}
           <View style={styles.inputWrapper}>
-            <Text style={[styles.input, { color: theme.text.color }]}>
+            <Text style={[styles.input, { color: editing[field] ? theme.text.color : '#999' }]}>
               {fields.birthDate || 'YYYY-MM-DD'}
             </Text>
             <TouchableOpacity
@@ -142,10 +232,8 @@ export default function AccountManagerScreen({ navigation }) {
             </TouchableOpacity>
           </View>
 
-          {/* עורך – רק כשבמצב עריכה */}
           {editing[field] && (
             Platform.OS === 'web' ? (
-              // HTML5 date input (פותח תאריכון בדפדפן)
               <input
                 type="date"
                 value={fields.birthDate || ''}
@@ -183,7 +271,6 @@ export default function AccountManagerScreen({ navigation }) {
       );
     }
 
-    // שדות רגילים
     return (
       <View style={styles.fieldRow} key={field}>
         <Text style={[styles.label, theme.text]}>{label}</Text>
@@ -195,10 +282,7 @@ export default function AccountManagerScreen({ navigation }) {
             secureTextEntry={secure}
             style={[
               styles.input,
-              {
-                color: theme.text.color,
-                backgroundColor: editing[field] ? '#fff1' : '#ccc1',
-              },
+              { color: editing[field] ? theme.text.color : '#999' },
             ]}
           />
           <TouchableOpacity
@@ -213,7 +297,6 @@ export default function AccountManagerScreen({ navigation }) {
 
   return (
     <SafeAreaView style={[styles.container, theme.container]}>
-      {/* בנר הצלחה קטן */}
       {showSaved && (
         <View style={styles.savedBanner}>
           <Text style={{ color: 'white', fontWeight: '600' }}>Saved ✔</Text>
@@ -254,6 +337,22 @@ export default function AccountManagerScreen({ navigation }) {
             disabled={loading || !isChanged()}
           />
         </View>
+
+        <View style={{ marginTop: 12, marginHorizontal: 24 }}>
+          <Button
+            title="Change Password"
+            onPress={() => navigation.navigate('ChangePassword')}
+            color="#d9534f"
+          />
+        </View>
+        <View style={{ marginTop: 12, marginHorizontal: 24 }}>
+  <Button
+    title="Delete Account"
+    onPress={handleDelete}
+    color="#b22222"
+  />
+</View>
+
       </ScrollView>
     </SafeAreaView>
   );

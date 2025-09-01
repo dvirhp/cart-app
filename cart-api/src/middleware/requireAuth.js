@@ -5,7 +5,8 @@ module.exports = function requireAuth(req, res, next) {
   // Get authorization header (e.g., "Bearer <token>")
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
-
+  console.log("🔐 Auth header:", header);
+  console.log("🔑 Extracted token:", token);
   // If no token is provided, reject the request
   if (!token) return res.status(401).json({ error: 'Missing token' });
 

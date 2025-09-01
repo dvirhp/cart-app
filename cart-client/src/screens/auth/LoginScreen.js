@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, Button, Alert, Platform, Switch, StyleSheet } from 'react-native';
+import {
+  View, Text, TextInput, Button, Alert, Platform, Switch, StyleSheet, TouchableOpacity
+} from 'react-native';
 import { login } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-import { useTheme } from '../../context/ThemeContext'; // ✅ חיבור ל־Theme
+import { useTheme } from '../../context/ThemeContext';
 
 const show = (t, m) => (Platform.OS === 'web' ? window.alert(`${t}\n${m}`) : Alert.alert(t, m));
 
 export default function LoginScreen({ navigation }) {
   const { signIn } = useAuth();
-  const { theme } = useTheme(); // ✅ שולפים theme
+  const { theme } = useTheme();
 
   const [email, setEmail] = useState('demo@cart.app');
   const [password, setPassword] = useState('123456');
@@ -20,20 +22,27 @@ export default function LoginScreen({ navigation }) {
       setLoading(true);
       const data = await login(email.trim(), password);
       await signIn(data, remember);
-      navigation.replace('MainApp');
     } catch (e) {
       const status = e?.response?.status;
       const payload = e?.response?.data;
+
+      // 👇 החלק הזה שחשוב להחזיר
       if (status === 403 && payload?.verifyRequired) {
-        show('Verification required', 'Your email is not verified. Please enter the code sent to you.');
+        show(
+          'Verification required',
+          'Your email is not verified. Please enter the code sent to you.'
+        );
         navigation.replace('VerifyEmail', { email: payload.email || email.trim() });
         return;
       }
+
       show('Login failed', payload?.error || 'Unknown error');
     } finally {
       setLoading(false);
     }
   };
+
+
 
   return (
     <View style={[styles.container, theme.container]}>
@@ -73,6 +82,11 @@ export default function LoginScreen({ navigation }) {
 
       {/* Register link */}
       <Button title="Don't have an account? Register" onPress={() => navigation.navigate('Register')} />
+
+      {/* Forgot Password link */}
+      <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
+        <Text style={[styles.forgotText, theme.text]}>Forgot Password?</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -83,4 +97,5 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderRadius: 8, padding: 12, marginBottom: 12 },
   rememberRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   rememberText: { marginLeft: 8, fontSize: 16 },
+  forgotText: { marginTop: 16, textAlign: 'center', fontSize: 14, textDecorationLine: 'underline' }
 });

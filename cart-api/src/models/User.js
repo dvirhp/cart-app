@@ -8,6 +8,7 @@ const userSchema = new Schema(
     firstName: { type: String, required: true },
     lastName: { type: String, required: true },
     birthDate: { type: Date, required: true },
+gender: { type: String, enum: ['male', 'female', 'other'], default: 'other' },
 
     phone: { type: String, required: true },   // 📱 Phone number (required)
     address: { type: String, default: null },  // 🏠 Address (optional)
@@ -20,6 +21,12 @@ const userSchema = new Schema(
     verifyCodeHash: { type: String, default: null },
     verifyCodeExpiresAt: { type: Date, default: null },
     verifyCodeAttempts: { type: Number, default: 0 },
+    avatar: { type: String, default: null },
+
+    resetPasswordCode: { type: String, default: null },
+resetPasswordExpires: { type: Date, default: null },
+
+
   },
   { timestamps: true }
 );
