@@ -12,15 +12,18 @@ export default function JoinFamilyScreen({ navigation }) {
   const [success, setSuccess] = useState(false);
   const [err, setErr] = useState('');
 
+  // ---------------- HANDLE JOIN FAMILY ----------------
   async function handleJoin() {
     setErr('');
     if (!code.trim()) {
       setErr('Please enter a join code.');
       return;
     }
+
     const res = await joinByCode(code.trim(), token);
+
     if (res.familyId) {
-      // Clear the screen and show success
+      // Clear form and show success state
       setCode('');
       setSuccess(true);
     } else {
@@ -28,19 +31,25 @@ export default function JoinFamilyScreen({ navigation }) {
     }
   }
 
+  // ---------------- SUCCESS STATE ----------------
   if (success) {
     return (
       <View style={[styles.container, theme.container]}>
-        <Text style={[styles.success, { color: '#2e7d32' }]}>Joined successfully</Text>
+        <Text style={[styles.success, { color: '#2e7d32' }]}>
+          Joined successfully
+        </Text>
         <View style={{ height: 10 }} />
         <Button title="Back" onPress={() => navigation.goBack()} />
       </View>
     );
   }
 
+  // ---------------- JOIN FORM ----------------
   return (
     <View style={[styles.container, theme.container]}>
       <Text style={[styles.title, theme.text]}>Join family</Text>
+
+      {/* Input for join code */}
       <TextInput
         style={[styles.input, { color: theme.text.color, borderColor: '#ccc' }]}
         placeholder="Join code"
@@ -50,7 +59,11 @@ export default function JoinFamilyScreen({ navigation }) {
         autoCapitalize="none"
         autoFocus
       />
+
+      {/* Submit button */}
       <Button title="Join" onPress={handleJoin} />
+
+      {/* Error message */}
       {err ? <Text style={[styles.error]}>{err}</Text> : null}
     </View>
   );

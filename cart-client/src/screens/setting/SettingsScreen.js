@@ -15,14 +15,15 @@ export default function SettingsScreen({ navigation }) {
   const { darkMode, toggleDarkMode, theme } = useTheme();
   const insets = useSafeAreaInsets();
 
-  // local avatar state (for instant preview)
+  // Local avatar state for immediate preview
   const [avatar, setAvatar] = useState(user?.avatar || null);
 
-  // ✅ sync avatar with context whenever user.avatar changes
+  // Sync avatar state with context whenever user.avatar changes
   useEffect(() => {
     setAvatar(user?.avatar || null);
   }, [user?.avatar]);
 
+  /* ---------- Handle avatar change (upload to server) ---------- */
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -33,16 +34,18 @@ export default function SettingsScreen({ navigation }) {
 
     if (!result.canceled) {
       const uri = result.assets[0].uri;
-      setAvatar(uri); // immediate preview
+      setAvatar(uri); // Show preview immediately
 
       try {
         const formData = new FormData();
 
         if (Platform.OS === 'web') {
+          // Web: convert URI to Blob
           const response = await fetch(uri);
           const blob = await response.blob();
           formData.append('avatar', blob, 'avatar.jpg');
         } else {
+          // Mobile: pass file object
           formData.append('avatar', {
             uri: Platform.OS === 'ios' ? uri.replace('file://', '') : uri,
             type: 'image/jpeg',
@@ -50,9 +53,10 @@ export default function SettingsScreen({ navigation }) {
           });
         }
 
+        // Upload to API
         const res = await fetch(`${BASE_URL}/api/v1/auth/upload-avatar`, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${token}` }, 
+          headers: { Authorization: `Bearer ${token}` }, // Do not set Content-Type manually
           body: formData,
         });
 
@@ -66,7 +70,7 @@ export default function SettingsScreen({ navigation }) {
         }
 
         if (data?.user) {
-          updateUser(data.user); // update context
+          updateUser(data.user); // Update auth context
           Alert.alert('✅ Success', 'Profile picture updated');
         } else {
           console.error("❌ Upload error:", data);
@@ -79,6 +83,7 @@ export default function SettingsScreen({ navigation }) {
     }
   };
 
+  /* ---------- Reusable menu item component ---------- */
   const MenuItem = ({ icon, label, onPress }) => (
     <TouchableOpacity style={styles.menuItem} onPress={onPress}>
       <Icon name={icon} size={22} color={theme.text.color} style={{ marginRight: 12 }} />
@@ -86,13 +91,14 @@ export default function SettingsScreen({ navigation }) {
     </TouchableOpacity>
   );
 
+  /* ---------- Render UI ---------- */
   return (
     <SafeAreaView style={[styles.container, theme.container]}>
       <ScrollView 
         contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
         showsVerticalScrollIndicator={true}
       >
-        {/* Profile section */}
+        {/* Profile section with avatar + display name */}
         <View style={styles.profileSection}>
           <TouchableOpacity onPress={pickImage} style={{ position: 'relative' }}>
             {avatar ? (
@@ -111,24 +117,39 @@ export default function SettingsScreen({ navigation }) {
           </Text>
         </View>
 
-        {/* Menu options */}
+        {/* Navigation menu items */}
         <View style={styles.menu}>
           <MenuItem 
             icon="person-outline" 
             label="Account Manager" 
             onPress={() => navigation.navigate('AccountManager')}
           />
-          <MenuItem icon="notifications-outline" label="Notifications" onPress={() => navigation.navigate('Notifications')} />
-          <MenuItem icon="help-circle-outline" label="Help" onPress={() => navigation.navigate('Help')} />
-          <MenuItem icon="information-circle-outline" label="About" onPress={() => navigation.navigate('About')} />
+          <MenuItem 
+            icon="notifications-outline" 
+            label="Notifications" 
+            onPress={() => navigation.navigate('Notifications')} 
+          />
+          <MenuItem 
+            icon="help-circle-outline" 
+            label="Help" 
+            onPress={() => navigation.navigate('Help')} 
+          />
+          <MenuItem 
+            icon="information-circle-outline" 
+            label="About" 
+            onPress={() => navigation.navigate('About')} 
+          />
         </View>
 
         {/* System options */}
         <View style={styles.systemOptions}>
+          {/* Dark mode toggle */}
           <View style={styles.switchRow}>
             <Text style={[styles.menuText, theme.text]}>Dark Mode</Text>
             <Switch value={darkMode} onValueChange={toggleDarkMode} />
           </View>
+
+          {/* Other system-related actions */}
           <MenuItem icon="accessibility-outline" label="Accessibility" onPress={() => {}} />
           <MenuItem icon="log-out-outline" label="Sign Out" onPress={signOut} />
         </View>
@@ -137,6 +158,7 @@ export default function SettingsScreen({ navigation }) {
   );
 }
 
+/* ---------- Styles ---------- */
 const styles = StyleSheet.create({
   container: { flex: 1 },
   profileSection: { alignItems: 'center', paddingVertical: 24 },

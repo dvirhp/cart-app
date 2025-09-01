@@ -1,17 +1,17 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import jwtDecode from 'jwt-decode'; // npm i jwt-decode
+import jwtDecode from 'jwt-decode'; // npm install jwt-decode
 
 const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
 
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(null);
-  const [user, setUser] = useState(null); // { id, email, role, avatar? }
+  const [user, setUser] = useState(null);   // User object: { id, email, role, avatar? }
   const [ready, setReady] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
 
-  // Load auth state from storage on app start
+  // ---------------- LOAD AUTH STATE ON APP START ----------------
   useEffect(() => {
     (async () => {
       try {
@@ -31,7 +31,8 @@ export function AuthProvider({ children }) {
     })();
   }, []);
 
-  // Normalize user object (ensure id/email/role exist)
+  // ---------------- NORMALIZE USER OBJECT ----------------
+  // Ensures that `id`, `email`, and `role` exist (from token or user object)
   function normalizeUser(u, t) {
     if (u?.id && u?.email) return u;
     if (!t) return u;
@@ -48,7 +49,8 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // Save token and user to state + storage
+  // ---------------- SIGN IN ----------------
+  // Save token and user to state + persistent storage if `remember` is true
   const signIn = async ({ token: newToken, user: newUser }, remember) => {
     const safeUser = normalizeUser(newUser, newToken);
 
@@ -71,7 +73,8 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Update user profile in state + storage
+  // ---------------- UPDATE USER ----------------
+  // Merge updates into current user and persist if `rememberMe` is enabled
   const updateUser = async (newUser) => {
     const merged = { ...(user || {}), ...(newUser || {}) };
     const safeUser = normalizeUser(merged, token);
@@ -85,7 +88,8 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Clear token and user from state + storage
+  // ---------------- SIGN OUT ----------------
+  // Clear token and user from state and storage
   const signOut = async () => {
     setToken(null);
     setUser(null);
@@ -99,6 +103,7 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // ---------------- CONTEXT VALUE ----------------
   const value = useMemo(
     () => ({ token, user, ready, signIn, signOut, rememberMe, updateUser }),
     [token, user, ready, rememberMe]

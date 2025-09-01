@@ -4,7 +4,7 @@ import { verifyEmail, resendCode } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 
-// Helper function for cross-platform alerts
+// ---------------- CROSS-PLATFORM ALERT ----------------
 const show = (title, message) =>
   Platform.OS === 'web' ? window.alert(`${title}\n${message}`) : Alert.alert(title, message);
 
@@ -17,6 +17,7 @@ export default function VerifyEmailScreen({ route, navigation }) {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // ---------------- VERIFY EMAIL ----------------
   const onVerify = async () => {
     if (!email.trim() || code.trim().length !== 6) {
       return show('Error', 'Please enter an email and a 6-digit code');
@@ -26,7 +27,7 @@ export default function VerifyEmailScreen({ route, navigation }) {
       setLoading(true);
       const data = await verifyEmail(email.trim(), code.trim());
 
-      // אם השרת החזיר token + user → נעדכן את ההקשר ונעבור למסך הראשי
+      // If server responds with token + user → update context and navigate to main app
       if (data?.token && data?.user) {
         await signIn(data);
       } else {
@@ -45,6 +46,7 @@ export default function VerifyEmailScreen({ route, navigation }) {
     }
   };
 
+  // ---------------- RESEND CODE ----------------
   const onResend = async () => {
     if (!email.trim()) return show('Error', 'Please enter an email');
 
@@ -58,6 +60,7 @@ export default function VerifyEmailScreen({ route, navigation }) {
     }
   };
 
+  // ---------------- RENDER ----------------
   return (
     <View style={[styles.container, theme.container]}>
       <Text style={[styles.title, theme.text]}>Verify Email</Text>
@@ -73,7 +76,7 @@ export default function VerifyEmailScreen({ route, navigation }) {
         style={[styles.input, { color: theme.text.color, borderColor: '#ccc' }]}
       />
 
-      {/* 6-digit code input */}
+      {/* 6-digit verification code */}
       <TextInput
         value={code}
         onChangeText={setCode}
@@ -81,7 +84,10 @@ export default function VerifyEmailScreen({ route, navigation }) {
         placeholder="6-digit code"
         placeholderTextColor={theme.text.color === '#fff' ? '#aaa' : '#555'}
         maxLength={6}
-        style={[styles.input, { color: theme.text.color, borderColor: '#ccc', letterSpacing: 6 }]} // 👈 ריווח בין ספרות
+        style={[
+          styles.input,
+          { color: theme.text.color, borderColor: '#ccc', letterSpacing: 6 } // Space out digits for readability
+        ]}
       />
 
       {/* Verify button */}
@@ -89,7 +95,7 @@ export default function VerifyEmailScreen({ route, navigation }) {
 
       <View style={{ height: 8 }} />
 
-      {/* Resend code */}
+      {/* Resend code button */}
       <Button title="Resend Code" onPress={onResend} />
 
       <View style={{ height: 8 }} />

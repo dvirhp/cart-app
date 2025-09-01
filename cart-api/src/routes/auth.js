@@ -11,13 +11,12 @@ const User = require('../models/User');
 const { sendMail } = require('../utils/mailer');
 const requireAuth = require('../middleware/requireAuth');
 
-/* ---------------- CLOUDINARY CONFIG ---------------- */
+/* ---------------- CLOUDINARY CONFIGURATION ---------------- */
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
-
 
 const storage = new CloudinaryStorage({
   cloudinary,
@@ -29,7 +28,7 @@ const storage = new CloudinaryStorage({
 });
 const upload = multer({ 
   storage, 
-  limits: { fileSize: 2 * 1024 * 1024 }, // ⛔ 2MB מקסימום
+  limits: { fileSize: 2 * 1024 * 1024 }, // ⛔ Maximum 2MB
   fileFilter: (req, file, cb) => {
     if (!/image\/(jpe?g|png)/.test(file.mimetype)) {
       return cb(new Error('Only JPG/PNG images allowed'), false);
@@ -38,7 +37,7 @@ const upload = multer({
   }
 });
 
-/* ---------------- JWT ---------------- */
+/* ---------------- JWT HELPER ---------------- */
 function sign(user) {
   return jwt.sign(
     { sub: user.id, email: user.email, role: user.role },
@@ -47,7 +46,7 @@ function sign(user) {
   );
 }
 
-/* ---------------- HELPERS ---------------- */
+/* ---------------- UTILITY HELPERS ---------------- */
 const genCode6 = () => String(Math.floor(100000 + Math.random() * 900000));
 const hashCode = (code) => crypto.createHash('sha256').update(code).digest('hex');
 const validate = (req, res) => {
@@ -68,13 +67,14 @@ router.post(
     return true;
   }),
   body('phone').matches(/^[0-9]{9,15}$/),
-body('address')
-  .optional({ checkFalsy: true }) 
-  .isString().withMessage('Invalid value'),  async (req, res) => {
+  body('address')
+    .optional({ checkFalsy: true }) 
+    .isString().withMessage('Invalid value'),  
+  async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-    const { email, password, firstName, lastName, birthDate, phone, address, gender  } = req.body;
+    const { email, password, firstName, lastName, birthDate, phone, address, gender } = req.body;
     const displayName = `${firstName} ${lastName}`;
 
     const exists = await User.findOne({ email });
@@ -117,7 +117,6 @@ body('address')
 );
 
 /* ---------------- LOGIN ---------------- */
-/* ---------------- LOGIN ---------------- */
 router.post('/login',
   body('email').isEmail(),
   body('password').notEmpty(),
@@ -131,7 +130,7 @@ router.post('/login',
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
 
-    // 🔑 בדיקה אם המייל אומת
+    // 🔑 Ensure the email has been verified
     if (!user.emailVerifiedAt) {
       return res.status(403).json({
         verifyRequired: true,
@@ -144,7 +143,6 @@ router.post('/login',
     return res.json({ token, user: user.toJSON() });
   }
 );
-
 
 /* ---------------- VERIFY ---------------- */
 router.post('/verify',
@@ -187,7 +185,7 @@ router.post('/verify',
   }
 );
 
-/* ---------------- RESEND ---------------- */
+/* ---------------- RESEND VERIFICATION CODE ---------------- */
 router.post('/resend',
   body('email').isEmail(),
   async (req, res) => {
@@ -295,16 +293,15 @@ router.post('/upload-avatar', requireAuth, upload.single('avatar'), async (req, 
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    user.avatar = req.file.path; // Cloudinary מחזיר URL
+    user.avatar = req.file.path; // Cloudinary returns a URL
     await user.save();
 
     return res.json({ message: 'Avatar updated', user: user.toJSON() });
   } catch (err) {
-    console.error("❌ UPLOAD ERROR:", err); // 👈 ייתן את השגיאה האמיתית
+    console.error("❌ UPLOAD ERROR:", err); // 👈 Logs the real error
     return res.status(500).json({ error: 'Server error', details: err.message });
   }
 });
-
 
 /* ---------------- FORGOT PASSWORD ---------------- */
 router.post('/forgot-password', async (req, res) => {
@@ -314,20 +311,20 @@ router.post('/forgot-password', async (req, res) => {
 
     const user = await User.findOne({ email });
     if (!user) {
-      // לא חושפים אם המשתמש קיים או לא
+      // Do not expose whether the user exists or not
       return res.json({ ok: true, message: 'If the email exists, code was sent' });
     }
 
-    // יצירת קוד 6 ספרות
+    // Generate 6-digit reset code
     const code = String(Math.floor(100000 + Math.random() * 900000));
     const codeHash = crypto.createHash('sha256').update(code).digest('hex');
 
-    // ✅ עדכון ישיר בלי להריץ את כל הוולידציות
+    // ✅ Direct update without running validations
     await User.updateOne(
       { _id: user._id },
       {
         resetPasswordCode: codeHash,
-        resetPasswordExpires: new Date(Date.now() + 10 * 60 * 1000) // 10 דקות
+        resetPasswordExpires: new Date(Date.now() + 10 * 60 * 1000) // Expires in 10 minutes
       }
     );
 
@@ -362,7 +359,7 @@ router.post('/reset-password', async (req, res) => {
       return res.status(400).json({ error: 'Invalid reset code' });
     }
 
-    // ✅ עדכון סיסמה ישיר
+    // ✅ Direct password update
     const newHash = await bcrypt.hash(newPassword, 10);
 
     await User.updateOne(
@@ -381,7 +378,7 @@ router.post('/reset-password', async (req, res) => {
   }
 });
 
-// 🗑️ Delete account
+/* ---------------- DELETE ACCOUNT ---------------- */
 router.delete('/delete-account', requireAuth, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -398,6 +395,5 @@ router.delete('/delete-account', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'Server error while deleting account' });
   }
 });
-
 
 module.exports = router;

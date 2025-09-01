@@ -5,6 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../context/ThemeContext';
 
+// ---- Settings related screens ----
 import SettingsScreen from './setting/SettingsScreen';
 import AccountManagerScreen from './setting/AccountManagerScreen';
 import NotificationsScreen from './setting/NotificationsScreen';
@@ -12,12 +13,13 @@ import HelpScreen from './setting/HelpScreen';
 import AboutScreen from './setting/AboutScreen';
 import ChangePasswordScreen from './setting/ChangePasswordScreen';
 
+// ---- Family navigation stack ----
 import FamilyStack from '../navigation/FamilyStack';
 
 const Tab = createBottomTabNavigator();
 const AccountStack = createNativeStackNavigator();
 
-// ---- dummy tabs ----
+/* ---------- Dummy placeholder tabs ---------- */
 function HomeScreen() {
   const { theme } = useTheme();
   return <View style={[styles.screen, theme.container]} />;
@@ -33,14 +35,17 @@ function CartScreen() {
   return <View style={[styles.screen, theme.container]} />;
 }
 
-// ---- Settings stack (nested) ----
+/* ---------- Nested stack for Settings section ---------- */
 function AccountNavigator() {
   const { theme } = useTheme();
 
   return (
     <AccountStack.Navigator
       initialRouteName="SettingsHome"
-      screenOptions={{ headerShown: false, contentStyle: theme.container }}
+      screenOptions={{
+        headerShown: false,            // hide headers for internal stack
+        contentStyle: theme.container, // respect current theme
+      }}
     >
       <AccountStack.Screen name="SettingsHome" component={SettingsScreen} />
       <AccountStack.Screen name="AccountManager" component={AccountManagerScreen} />
@@ -56,14 +61,14 @@ function AccountNavigator() {
   );
 }
 
-// ---- Main bottom tabs ----
+/* ---------- Main bottom tab navigation ---------- */
 export default function MainApp() {
   const { darkMode } = useTheme();
 
   return (
     <Tab.Navigator
       screenOptions={{
-        headerShown: false,
+        headerShown: false, // no header on tab screens
         tabBarStyle: {
           height: 65,
           position: 'absolute',
@@ -73,7 +78,7 @@ export default function MainApp() {
         tabBarInactiveTintColor: darkMode ? '#aaa' : '#666',
       }}
     >
-      {/* שמאל 1 */}
+      {/* Left 1: Home */}
       <Tab.Screen
         name="Home"
         component={HomeScreen}
@@ -85,7 +90,7 @@ export default function MainApp() {
         }}
       />
 
-      {/* שמאל 2 */}
+      {/* Left 2: Categories */}
       <Tab.Screen
         name="Categories"
         component={CategoriesScreen}
@@ -97,7 +102,7 @@ export default function MainApp() {
         }}
       />
 
-      {/* אמצע – עגלת קניות עם אייקון */}
+      {/* Center: Cart – styled as a floating green button */}
       <Tab.Screen
         name="Cart"
         component={CartScreen}
@@ -111,7 +116,7 @@ export default function MainApp() {
         }}
       />
 
-      {/* ימין 1 – Families (במקום Search) */}
+      {/* Right 1: Families (instead of Search) */}
       <Tab.Screen
         name="Families"
         component={FamilyStack}
@@ -123,7 +128,7 @@ export default function MainApp() {
         }}
       />
 
-      {/* ימין 2 – Settings */}
+      {/* Right 2: Settings */}
       <Tab.Screen
         name="Settings"
         component={AccountNavigator}
@@ -138,9 +143,9 @@ export default function MainApp() {
   );
 }
 
-// ---- styles ----
+/* ---------- Styles ---------- */
 const styles = StyleSheet.create({
-  screen: { flex: 1 },
+  screen: { flex: 1 }, // empty placeholder screen
   cartButton: {
     backgroundColor: 'green',
     borderRadius: 35,
@@ -151,6 +156,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cartButtonFocused: {
-    transform: [{ scale: 1.05 }],
+    transform: [{ scale: 1.05 }], // enlarge slightly when focused
   },
 });

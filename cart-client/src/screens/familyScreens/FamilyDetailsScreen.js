@@ -18,7 +18,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
 
-/* ---------- Cross-platform Alert ---------- */
+/* ---------------- CROSS-PLATFORM ALERT ---------------- */
 function showAlert(title, msg, buttons) {
   if (Platform.OS === 'web') {
     window.alert(`${title}\n\n${msg}`);
@@ -43,6 +43,7 @@ export default function FamilyDetailsScreen({ route, navigation }) {
   const [copied, setCopied] = useState(false);
   const [cart, setCart] = useState([]);
 
+  // ---------------- LOAD DATA ----------------
   async function load() {
     const res = await getFamily(familyId, token);
     if (res.error) { showAlert('Error', res.error); return; }
@@ -61,7 +62,7 @@ export default function FamilyDetailsScreen({ route, navigation }) {
     loadCart();
   }, [familyId, token]);
 
-  // === Avatar update ===
+  // ---------------- UPDATE AVATAR ----------------
   async function changeAvatar() {
     if (Platform.OS === 'web') {
       const input = document.createElement('input');
@@ -119,6 +120,7 @@ export default function FamilyDetailsScreen({ route, navigation }) {
     }
   }
 
+  // ---------------- UPDATE DESCRIPTION ----------------
   async function saveDescription() {
     try {
       setLoading(true);
@@ -136,6 +138,7 @@ export default function FamilyDetailsScreen({ route, navigation }) {
     }
   }
 
+  // ---------------- DELETE / LEAVE FAMILY ----------------
   async function onDeleteFamily() {
     showAlert('Delete Family', 'Are you sure? This action is permanent.', [
       { text: 'Cancel' },
@@ -164,6 +167,7 @@ export default function FamilyDetailsScreen({ route, navigation }) {
     else showAlert('Error', r.error || 'Failed to leave family');
   }
 
+  // ---------------- REMOVE MEMBER (OWNER ONLY) ----------------
   async function onRemoveMember(userId) {
     showAlert('Remove Member', 'Are you sure you want to remove this member?', [
       { text: 'Cancel' },
@@ -179,7 +183,7 @@ export default function FamilyDetailsScreen({ route, navigation }) {
     ]);
   }
 
-  // === Share helpers ===
+  // ---------------- SHARE HELPERS ----------------
   function inviteMessage(code) {
     return `You were invited to join the family "${family.name}" in the app!\nJoin code: ${code}\nOpen the app and enter the code to join.`;
   }
@@ -200,6 +204,7 @@ export default function FamilyDetailsScreen({ route, navigation }) {
     setTimeout(() => setCopied(false), 2000);
   }
 
+  // ---------------- RENDER ----------------
   if (!family) {
     return (
       <View style={[styles.container, theme.container]}>
@@ -212,8 +217,8 @@ export default function FamilyDetailsScreen({ route, navigation }) {
 
   return (
     <View style={[styles.container, theme.container]}>
-      {/* Avatar */}
-<View style={[styles.header, theme.container]}>
+      {/* Family avatar */}
+      <View style={[styles.header, theme.container]}>
         <TouchableOpacity onPress={changeAvatar} activeOpacity={0.8} disabled={loading}>
           {family.avatar ? (
             <Image source={{ uri: family.avatar }} style={styles.avatar} />
@@ -244,9 +249,9 @@ export default function FamilyDetailsScreen({ route, navigation }) {
         )}
       </View>
 
-      {/* Join code & Invite */}
+      {/* Join code + invite actions */}
       <View style={styles.section}>
-<View style={[styles.sectionHeader, theme.container]}>
+        <View style={[styles.sectionHeader, theme.container]}>
           <Text style={[styles.sectionTitle, theme.text]}>Join Code</Text>
           <TouchableOpacity onPress={() => copyCode(family.joinCode)}>
             <Icon name="copy-outline" size={20} color={theme.text.color} />
@@ -265,9 +270,9 @@ export default function FamilyDetailsScreen({ route, navigation }) {
         </View>
       </View>
 
-      {/* Description */}
+      {/* Description section */}
       <View style={styles.section}>
-<View style={[styles.sectionHeader, theme.container]}>
+        <View style={[styles.sectionHeader, theme.container]}>
           <Text style={[styles.sectionTitle, theme.text]}>Description</Text>
           {!editingDescription && (
             <TouchableOpacity onPress={() => setEditingDescription(true)}>
@@ -312,7 +317,7 @@ export default function FamilyDetailsScreen({ route, navigation }) {
         )}
       </View>
 
-      {/* Members */}
+      {/* Members section */}
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, theme.text]}>Members</Text>
         <FlatList
@@ -340,7 +345,7 @@ export default function FamilyDetailsScreen({ route, navigation }) {
         />
       </View>
 
-      {/* Shopping Cart */}
+      {/* Shopping cart section */}
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, theme.text]}>Shopping Cart</Text>
         {cart.length === 0 ? (
@@ -363,7 +368,7 @@ export default function FamilyDetailsScreen({ route, navigation }) {
         )}
       </View>
 
-      {/* Actions */}
+      {/* Actions: delete or leave family */}
       <View style={styles.actions}>
         {isOwner ? (
           <>

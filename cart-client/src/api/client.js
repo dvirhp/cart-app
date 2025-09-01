@@ -1,18 +1,20 @@
 import axios from 'axios';
 import { Platform } from 'react-native';
 
-// API base URL for local development
+// ---------------- BASE CONFIG ----------------
+// API base URL (adjust for development/production as needed)
 export const BASE_URL = 'http://localhost:3000';
 
 export const api = axios.create({ baseURL: BASE_URL + '/api/v1' });
 
+// ---------------- AUTH ----------------
 export async function login(email, password) {
   const { data } = await api.post('/auth/login', { email, password });
   return data; // { token, user } or 403 with { verifyRequired: true, email }
 }
 
 export async function register(payload) {
-  // payload = { email, password, firstName, lastName, birthDate, phone, address }
+  // payload example: { email, password, firstName, lastName, birthDate, phone, address }
   const { data } = await api.post('/auth/register', payload, {
     headers: { 'Content-Type': 'application/json' }
   });
@@ -29,6 +31,7 @@ export async function resendCode(email) {
   return data; // { ok: true }
 }
 
+// ---------------- USERS ----------------
 export async function fetchUsers(token, { q }) {
   console.log("📡 fetchUsers called with token:", token); 
 
@@ -37,7 +40,7 @@ export async function fetchUsers(token, { q }) {
     params: { q }, // query string (?q=)
   });
 
-  return data; 
+  return data;
 }
 
 export async function updateProfile(token, payload) {
@@ -54,29 +57,28 @@ export async function changePassword(token, payload) {
       'Content-Type': 'application/json'
     }
   });
-  return data; // מצופה { success: true }
+  return data; // Expected: { success: true }
 }
 
-// 📤 Upload avatar (multipart form-data)
-// client.js
+// ---------------- AVATAR ----------------
 export async function uploadAvatar(token, uri) {
   const formData = new FormData();
   formData.append('avatar', {
-    uri: Platform.OS === 'ios' ? uri.replace('file://', '') : uri, // 👈 תיקון ל-iOS
+    uri: Platform.OS === 'ios' ? uri.replace('file://', '') : uri, // iOS path fix
     name: 'avatar.jpg',
     type: 'image/jpeg',
   });
 
   const { data } = await api.post('/auth/upload-avatar', formData, {
     headers: {
-      Authorization: `Bearer ${token}`, // 👈 לא מוסיפים Content-Type
+      Authorization: `Bearer ${token}`, // Do not manually set Content-Type
     },
   });
 
   return data; // { message, user }
 }
 
-
+// ---------------- PASSWORD RECOVERY ----------------
 export async function forgotPassword(email) {
   try {
     const { data } = await api.post('/auth/forgot-password', { email });
@@ -97,6 +99,7 @@ export async function resetPassword(email, code, newPassword) {
   }
 }
 
+// ---------------- ACCOUNT ----------------
 export async function deleteAccount(token) {
   try {
     const { data } = await api.delete('/auth/delete-account', {

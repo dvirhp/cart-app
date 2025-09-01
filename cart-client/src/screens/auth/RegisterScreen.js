@@ -11,6 +11,7 @@ import { Picker } from '@react-native-picker/picker';
 const DatePicker = ({ date, setDate }) => {
   const [show, setShow] = useState(false);
 
+  // ---------------- WEB IMPLEMENTATION ----------------
   if (Platform.OS === 'web') {
     return (
       <input
@@ -32,6 +33,7 @@ const DatePicker = ({ date, setDate }) => {
     );
   }
 
+  // ---------------- MOBILE IMPLEMENTATION ----------------
   return (
     <View style={{ marginBottom: 12 }}>
       <Button title="Select Birth Date" onPress={() => setShow(true)} />
@@ -56,6 +58,7 @@ const DatePicker = ({ date, setDate }) => {
   );
 };
 
+// ---------------- ALERT WRAPPER ----------------
 const showAlert = (title, msg) => {
   if (Platform.OS === 'web') window.alert(`${title}\n${msg}`);
   else Alert.alert(title, msg);
@@ -68,7 +71,7 @@ export default function RegisterScreen({ navigation }) {
   const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
-  const [gender, setGender] = useState('other'); // 👈 gender state
+  const [gender, setGender] = useState('other'); // Gender state
   const [birthDate, setBirthDate] = useState(new Date());
 
   const [loading, setLoading] = useState(false);
@@ -76,6 +79,7 @@ export default function RegisterScreen({ navigation }) {
 
   const { theme } = useTheme();
 
+  // ---------------- VALIDATION ----------------
   const validate = () => {
     if (!firstName.trim()) return 'First name is required';
     if (!lastName.trim()) return 'Last name is required';
@@ -85,6 +89,7 @@ export default function RegisterScreen({ navigation }) {
     return null;
   };
 
+  // ---------------- SUBMIT HANDLER ----------------
   const onSubmit = async () => {
     const errorMsg = validate();
     if (errorMsg) {
@@ -107,7 +112,7 @@ export default function RegisterScreen({ navigation }) {
         birthDate: formattedDate,
         phone: phone.trim(),
         address: address.trim(),
-        gender, // 👈 נשלח לשרת
+        gender, // Send gender to backend
       });
 
       if (res?.verifyRequired) {
@@ -137,6 +142,7 @@ export default function RegisterScreen({ navigation }) {
     }
   };
 
+  // ---------------- RENDER ----------------
   return (
     <SafeAreaView style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={[styles.container, theme.container]}>
@@ -234,7 +240,7 @@ export default function RegisterScreen({ navigation }) {
         </Text>
         <DatePicker date={birthDate} setDate={setBirthDate} />
 
-        {/* Error */}
+        {/* Inline error */}
         {inlineError ? <Text style={{ color: 'red', marginBottom: 12 }}>{inlineError}</Text> : null}
 
         {/* Submit */}

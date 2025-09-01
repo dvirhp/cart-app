@@ -23,7 +23,9 @@ export default function ChangePasswordScreen({ navigation }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
+  /* ---------- Handle form submission ---------- */
   const handleSubmit = async () => {
+    // Basic validation
     if (!currentPassword || !newPassword || !confirmPassword) {
       return Alert.alert('Error', 'All fields are required');
     }
@@ -36,10 +38,13 @@ export default function ChangePasswordScreen({ navigation }) {
 
     try {
       setLoading(true);
+
+      // Call API to change password
       const res = await changePassword(token, {
         currentPassword,
         newPassword,
       });
+
       if (res?.success) {
         Alert.alert('✅ Success', 'Password updated successfully');
         navigation.goBack();
@@ -54,6 +59,7 @@ export default function ChangePasswordScreen({ navigation }) {
     }
   };
 
+  /* ---------- Render a single password field ---------- */
   const renderField = (label, value, setValue, placeholder) => (
     <View style={styles.fieldRow}>
       <Text style={[styles.label, theme.text]}>{label}</Text>
@@ -66,15 +72,17 @@ export default function ChangePasswordScreen({ navigation }) {
         style={[
           styles.input,
           {
-            color: value ? theme.text.color : '#999', // אפור כברירת מחדל
+            color: value ? theme.text.color : '#999', // Default to grey if empty
           },
         ]}
       />
     </View>
   );
 
+  /* ---------- Render UI ---------- */
   return (
     <SafeAreaView style={[styles.container, theme.container]}>
+      {/* Back navigation */}
       <TouchableOpacity
         style={styles.backButton}
         onPress={() => navigation.goBack()}
@@ -82,11 +90,13 @@ export default function ChangePasswordScreen({ navigation }) {
         <Icon name="arrow-back" size={24} color={theme.text.color} />
       </TouchableOpacity>
 
+      {/* Form fields */}
       <View style={{ padding: 24 }}>
         {renderField('Current Password', currentPassword, setCurrentPassword, 'Enter current password')}
         {renderField('New Password', newPassword, setNewPassword, 'Enter new password')}
         {renderField('Confirm New Password', confirmPassword, setConfirmPassword, 'Confirm new password')}
 
+        {/* Submit button */}
         <View style={{ marginTop: 24 }}>
           <Button
             title={loading ? 'Updating...' : 'Save New Password'}
@@ -99,6 +109,7 @@ export default function ChangePasswordScreen({ navigation }) {
   );
 }
 
+/* ---------- Styles ---------- */
 const styles = StyleSheet.create({
   container: { flex: 1 },
   backButton: { padding: 16, alignSelf: 'flex-start' },

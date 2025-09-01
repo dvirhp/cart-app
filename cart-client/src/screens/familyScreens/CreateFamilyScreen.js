@@ -16,12 +16,12 @@ export default function CreateFamilyScreen({ navigation }) {
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [avatar, setAvatar] = useState(null); // preview uri
-  const [fileObj, setFileObj] = useState(null); // real File (for web)
+  const [avatar, setAvatar] = useState(null); // Preview URI
+  const [fileObj, setFileObj] = useState(null); // File object for web
   const [success, setSuccess] = useState(false);
   const [err, setErr] = useState('');
 
-  /* ---------------- PICK IMAGE (mobile) ---------------- */
+  // ---------------- PICK IMAGE (Mobile only) ----------------
   const pickImage = async () => {
     if (Platform.OS === 'web') return;
 
@@ -39,7 +39,7 @@ export default function CreateFamilyScreen({ navigation }) {
     }
   };
 
-  /* ---------------- HANDLE CREATE ---------------- */
+  // ---------------- CREATE FAMILY ----------------
   const handleCreate = async () => {
     setErr('');
     if (!name.trim()) {
@@ -52,6 +52,7 @@ export default function CreateFamilyScreen({ navigation }) {
       formData.append('name', name.trim());
       if (description.trim()) formData.append('description', description.trim());
 
+      // Handle file upload differently for web vs. mobile
       if (Platform.OS === 'web' && fileObj) {
         formData.append('avatar', fileObj);
       } else if (avatar && Platform.OS !== 'web') {
@@ -84,6 +85,7 @@ export default function CreateFamilyScreen({ navigation }) {
     }
   };
 
+  // ---------------- SUCCESS VIEW ----------------
   if (success) {
     return (
       <View style={[styles.container, theme.container]}>
@@ -96,11 +98,12 @@ export default function CreateFamilyScreen({ navigation }) {
     );
   }
 
+  // ---------------- FORM VIEW ----------------
   return (
     <View style={[styles.container, theme.container]}>
       <Text style={[styles.title, theme.text]}>Create family</Text>
 
-      {/* Family avatar with camera overlay */}
+      {/* Family avatar picker with camera overlay */}
       <View style={styles.imageWrapper}>
         <TouchableOpacity
           onPress={() => {
@@ -125,7 +128,7 @@ export default function CreateFamilyScreen({ navigation }) {
           </View>
         </TouchableOpacity>
 
-        {/* hidden input for web */}
+        {/* Hidden input for web */}
         {Platform.OS === 'web' && (
           <input
             id="avatarInput"
@@ -143,6 +146,7 @@ export default function CreateFamilyScreen({ navigation }) {
         )}
       </View>
 
+      {/* Family name input */}
       <TextInput
         style={[styles.input, { color: theme.text.color, borderColor: '#ccc' }]}
         placeholder="Family name (required)"
@@ -151,6 +155,7 @@ export default function CreateFamilyScreen({ navigation }) {
         onChangeText={setName}
       />
 
+      {/* Family description input */}
       <TextInput
         style={[styles.textArea, { color: theme.text.color, borderColor: '#ccc' }]}
         placeholder="Family description (optional)"

@@ -9,7 +9,7 @@ export function ThemeProvider({ children }) {
   const [darkMode, setDarkMode] = useState(false);
   const [ready, setReady] = useState(false);
 
-  // Load preference once when app starts
+  // ---------------- LOAD PREFERENCE ON APP START ----------------
   useEffect(() => {
     (async () => {
       const saved = await AsyncStorage.getItem('darkMode');
@@ -18,18 +18,20 @@ export function ThemeProvider({ children }) {
     })();
   }, []);
 
-  // Toggle + save to storage
+  // ---------------- TOGGLE DARK MODE ----------------
+  // Switch between light/dark mode and persist in storage
   const toggleDarkMode = async () => {
     const newMode = !darkMode;
     setDarkMode(newMode);
     await AsyncStorage.setItem('darkMode', newMode ? 'true' : 'false');
   };
 
-  // Themes
+  // ---------------- THEMES ----------------
   const lightTheme = {
     container: { backgroundColor: '#fff' },
     text: { color: '#000' },
   };
+
   const darkTheme = {
     container: { backgroundColor: '#121212' },
     text: { color: '#fff' },
@@ -37,11 +39,11 @@ export function ThemeProvider({ children }) {
 
   const theme = darkMode ? darkTheme : lightTheme;
 
-  if (!ready) return null; // wait until we load from storage
+  if (!ready) return null; // Wait until preference is loaded from storage
 
   return (
     <ThemeContext.Provider value={{ darkMode, toggleDarkMode, theme }}>
-      {/* Global wrapper with background color */}
+      {/* Global wrapper that applies the background color */}
       <View style={[{ flex: 1 }, theme.container]}>
         {children}
       </View>

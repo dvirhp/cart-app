@@ -17,10 +17,10 @@ import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
-import { updateProfile, api, BASE_URL } from '../../api/client';
+import { updateProfile, BASE_URL } from '../../api/client';
 import { deleteAccount } from '../../api/client';
 
-
+/* ---------- Helper to format today's date (for validation) ---------- */
 function todayStr() {
   const d = new Date();
   const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -29,11 +29,12 @@ function todayStr() {
 }
 
 export default function AccountManagerScreen({ navigation }) {
-  const { user, token, updateUser, signOut  } = useAuth();
+  const { user, token, updateUser, signOut } = useAuth();
   const { theme } = useTheme();
 
   const [avatar, setAvatar] = useState(user?.avatar || null);
 
+  /* ---------- Initialize profile fields from user object ---------- */
   const initial = useMemo(() => ({
     firstName: user?.firstName || '',
     lastName:  user?.lastName  || '',
@@ -49,127 +50,124 @@ export default function AccountManagerScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [showSaved, setShowSaved] = useState(false);
 
+  // Handle input change for a given field
   const handleChange = (field, value) => {
     setFields((prev) => ({ ...prev, [field]: value }));
   };
 
-  // ✅ מתוקן – שליחת FormData עם קובץ
+  /* ---------- Avatar upload handler ---------- */
   const pickImage = async () => {
-  const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ImagePicker.MediaTypeOptions.Images,
-    allowsEditing: true,
-    aspect: [1, 1],
-    quality: 1,
-  });
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 1,
+    });
 
-  if (!result.canceled) {
-    const uri = result.assets[0].uri;
-    setAvatar(uri); // ✅ show preview immediately
+    if (!result.canceled) {
+      const uri = result.assets[0].uri;
+      setAvatar(uri); // Show preview immediately
 
-    try {
-      const formData = new FormData();
-
-      if (Platform.OS === 'web') {
-        // 🖥️ Web: convert URI to Blob
-        const response = await fetch(uri);
-        const blob = await response.blob();
-        formData.append('avatar', blob, 'avatar.jpg');
-      } else {
-        // 📱 Mobile: send object with uri + type + name
-        formData.append('avatar', {
-          uri: Platform.OS === 'ios' ? uri.replace('file://', '') : uri,
-          type: 'image/jpeg',
-          name: 'avatar.jpg',
-        });
-      }
-
-      const res = await fetch(`${BASE_URL}/api/v1/auth/upload-avatar`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` }, // ❗ no Content-Type
-        body: formData,
-      });
-
-      const text = await res.text(); // debug in case response is not JSON
-      let data;
       try {
-        data = JSON.parse(text);
-      } catch {
-        console.error("❌ Server returned non-JSON:", text);
-        throw new Error("Invalid server response");
-      }
+        const formData = new FormData();
 
-      if (data?.user) {
-        updateUser(data.user); // עדכון ה-context
-        setAvatar(data.user.avatar); // שמירת ה-URL שהתקבל מהשרת
-        Alert.alert('✅ Success', 'Profile picture updated');
-      } else {
-        Alert.alert('Error', data?.error || 'Upload failed');
+        if (Platform.OS === 'web') {
+          // Web: convert URI to Blob
+          const response = await fetch(uri);
+          const blob = await response.blob();
+          formData.append('avatar', blob, 'avatar.jpg');
+        } else {
+          // Mobile: send file object with metadata
+          formData.append('avatar', {
+            uri: Platform.OS === 'ios' ? uri.replace('file://', '') : uri,
+            type: 'image/jpeg',
+            name: 'avatar.jpg',
+          });
+        }
+
+        const res = await fetch(`${BASE_URL}/api/v1/auth/upload-avatar`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` }, // Content-Type is handled automatically
+          body: formData,
+        });
+
+        // Parse response (handle non-JSON errors gracefully)
+        const text = await res.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          console.error("❌ Server returned non-JSON:", text);
+          throw new Error("Invalid server response");
+        }
+
+        if (data?.user) {
+          updateUser(data.user);
+          setAvatar(data.user.avatar);
+          Alert.alert('✅ Success', 'Profile picture updated');
+        } else {
+          Alert.alert('Error', data?.error || 'Upload failed');
+        }
+      } catch (err) {
+        console.error('❌ Avatar upload failed:', err);
+        Alert.alert('Error', 'Failed to update profile picture');
       }
-    } catch (err) {
-      console.error('❌ Avatar upload failed:', err);
-      Alert.alert('Error', 'Failed to update profile picture');
     }
-  }
-};
+  };
 
-const handleDelete = async () => {
-  if (Platform.OS === 'web') {
-    const confirmed = window.confirm(
-      'Are you sure you want to delete your account? This action cannot be undone.'
-    );
-    if (!confirmed) return;
+  /* ---------- Account deletion handler ---------- */
+  const handleDelete = async () => {
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm(
+        'Are you sure you want to delete your account? This action cannot be undone.'
+      );
+      if (!confirmed) return;
 
-    try {
-      console.log("🔑 Token before delete request:", token);
-
-      const res = await deleteAccount(token);
-      if (res?.success) {
-        alert('✅ Deleted: Your account has been deleted');
-        await signOut();
-
-      } else {
-        alert('Error: ' + (res?.error || 'Failed to delete account'));
+      try {
+        const res = await deleteAccount(token);
+        if (res?.success) {
+          alert('✅ Deleted: Your account has been deleted');
+          await signOut();
+        } else {
+          alert('Error: ' + (res?.error || 'Failed to delete account'));
+        }
+      } catch (err) {
+        console.error('❌ Delete error:', err);
+        alert('Server error while deleting account');
       }
-    } catch (err) {
-      console.error('❌ Delete error:', err);
-      alert('Server error while deleting account');
-    }
-  } else {
-    Alert.alert(
-      'Delete Account',
-      'Are you sure you want to delete your account? This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Yes, Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              console.log("🔑 Token before delete request:", token);
-
-              const res = await deleteAccount(token);
-              if (res?.success) {
-                Alert.alert('✅ Deleted', 'Your account has been deleted');
-                navigation.reset({
-                  index: 0,
-                  routes: [{ name: 'Login' }],
-                });
-              } else {
-                Alert.alert('Error', res?.error || 'Failed to delete account');
+    } else {
+      Alert.alert(
+        'Delete Account',
+        'Are you sure you want to delete your account? This action cannot be undone.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Yes, Delete',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                const res = await deleteAccount(token);
+                if (res?.success) {
+                  Alert.alert('✅ Deleted', 'Your account has been deleted');
+                  navigation.reset({
+                    index: 0,
+                    routes: [{ name: 'Login' }],
+                  });
+                } else {
+                  Alert.alert('Error', res?.error || 'Failed to delete account');
+                }
+              } catch (err) {
+                console.error('❌ Delete error:', err);
+                Alert.alert('Error', 'Server error while deleting account');
               }
-            } catch (err) {
-              console.error('❌ Delete error:', err);
-              Alert.alert('Error', 'Server error while deleting account');
-            }
+            },
           },
-        },
-      ]
-    );
-  }
-};
+        ]
+      );
+    }
+  };
 
-
-
+  /* ---------- Check if profile fields have changed ---------- */
   const isChanged = () =>
     fields.firstName !== original.firstName ||
     fields.lastName  !== original.lastName  ||
@@ -178,17 +176,18 @@ const handleDelete = async () => {
     fields.address   !== original.address   ||
     (fields.birthDate || '') !== (original.birthDate || '');
 
+  /* ---------- Save profile changes ---------- */
   const handleSave = async () => {
     try {
       setLoading(true);
 
+      // Validate birthdate format
       if (fields.birthDate && !/^\d{4}-\d{2}-\d{2}$/.test(fields.birthDate)) {
-        Alert.alert('שגיאה', 'תאריך לא תקין. פורמט נדרש: YYYY-MM-DD');
+        Alert.alert('Error', 'Invalid date format. Required: YYYY-MM-DD');
         return;
       }
 
-      const payload = { ...fields };
-      const res = await updateProfile(token, payload);
+      const res = await updateProfile(token, fields);
 
       if (res?.user) {
         const updated = {
@@ -216,8 +215,10 @@ const handleDelete = async () => {
     }
   };
 
+  /* ---------- Render a single profile field row ---------- */
   const renderField = (label, field, secure = false) => {
     if (field === 'birthDate') {
+      // Special handling for birthdate (Date picker on mobile / <input type="date" /> on web)
       return (
         <View style={styles.fieldRow} key={field}>
           <Text style={[styles.label, theme.text]}>{label}</Text>
@@ -271,6 +272,7 @@ const handleDelete = async () => {
       );
     }
 
+    // Default handling for text fields
     return (
       <View style={styles.fieldRow} key={field}>
         <Text style={[styles.label, theme.text]}>{label}</Text>
@@ -295,19 +297,23 @@ const handleDelete = async () => {
     );
   };
 
+  /* ---------- Render UI ---------- */
   return (
     <SafeAreaView style={[styles.container, theme.container]}>
+      {/* Save confirmation banner */}
       {showSaved && (
         <View style={styles.savedBanner}>
           <Text style={{ color: 'white', fontWeight: '600' }}>Saved ✔</Text>
         </View>
       )}
 
+      {/* Back button */}
       <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
         <Icon name="arrow-back" size={24} color={theme.text.color} />
       </TouchableOpacity>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
+        {/* Avatar section */}
         <View style={styles.profileSection}>
           <TouchableOpacity onPress={pickImage} style={{ position: 'relative' }}>
             {avatar ? (
@@ -323,6 +329,7 @@ const handleDelete = async () => {
           </TouchableOpacity>
         </View>
 
+        {/* Profile fields */}
         {renderField('First Name', 'firstName')}
         {renderField('Last Name', 'lastName')}
         {renderField('Email', 'email')}
@@ -330,6 +337,7 @@ const handleDelete = async () => {
         {renderField('Address', 'address')}
         {renderField('Birth Date', 'birthDate')}
 
+        {/* Save changes */}
         <View style={{ marginTop: 24, marginHorizontal: 24 }}>
           <Button
             title={loading ? 'Saving...' : 'Save Changes'}
@@ -338,6 +346,7 @@ const handleDelete = async () => {
           />
         </View>
 
+        {/* Change password */}
         <View style={{ marginTop: 12, marginHorizontal: 24 }}>
           <Button
             title="Change Password"
@@ -345,19 +354,21 @@ const handleDelete = async () => {
             color="#d9534f"
           />
         </View>
-        <View style={{ marginTop: 12, marginHorizontal: 24 }}>
-  <Button
-    title="Delete Account"
-    onPress={handleDelete}
-    color="#b22222"
-  />
-</View>
 
+        {/* Delete account */}
+        <View style={{ marginTop: 12, marginHorizontal: 24 }}>
+          <Button
+            title="Delete Account"
+            onPress={handleDelete}
+            color="#b22222"
+          />
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
+/* ---------- Styles ---------- */
 const styles = StyleSheet.create({
   container: { flex: 1 },
   backButton: { padding: 16, alignSelf: 'flex-start' },

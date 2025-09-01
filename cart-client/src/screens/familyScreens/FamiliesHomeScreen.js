@@ -12,10 +12,11 @@ import { listFamilies } from '../../api/familyApi';
 
 export default function FamiliesHomeScreen({ navigation }) {
   const { token } = useAuth();
-  const { theme, mode } = useTheme(); // 👈 הוספתי mode
+  const { theme, mode } = useTheme(); // Added `mode` for light/dark detection
   const insets = useSafeAreaInsets();
   const [families, setFamilies] = useState([]);
 
+  // ---------------- LOAD FAMILIES ----------------
   async function load() {
     try {
       const res = await listFamilies(token);
@@ -33,12 +34,13 @@ export default function FamiliesHomeScreen({ navigation }) {
     }, [token])
   );
 
+  // ---------------- RENDER SINGLE FAMILY ----------------
   const renderFamily = ({ item }) => (
     <TouchableOpacity
       style={[
         styles.familyCard,
         theme.container,
-        { borderColor: mode === 'dark' ? '#fff' : '#ccc' } // 👈 הוספנו מסגרת
+        { borderColor: mode === 'dark' ? '#fff' : '#ccc' } // Border color based on theme
       ]}
       onPress={() => navigation.navigate('FamilyDetails', { familyId: item._id })}
     >
@@ -53,14 +55,16 @@ export default function FamiliesHomeScreen({ navigation }) {
     </TouchableOpacity>
   );
 
+  // ---------------- RENDER SCREEN ----------------
   return (
     <View style={[styles.container, theme.container]}>
+      {/* Action tiles */}
       <View style={styles.tilesRow}>
         <TouchableOpacity
           style={[
             styles.tile,
             theme.container,
-            { borderColor: mode === 'dark' ? '#fff' : '#ccc' } // 👈 הוספנו מסגרת
+            { borderColor: mode === 'dark' ? '#fff' : '#ccc' } // Border color based on theme
           ]}
           onPress={() => navigation.navigate('CreateFamily')}
         >
@@ -70,7 +74,7 @@ export default function FamiliesHomeScreen({ navigation }) {
           style={[
             styles.tile,
             theme.container,
-            { borderColor: mode === 'dark' ? '#fff' : '#ccc' } // 👈 הוספנו מסגרת
+            { borderColor: mode === 'dark' ? '#fff' : '#ccc' }
           ]}
           onPress={() => navigation.navigate('JoinFamily')}
         >
@@ -78,6 +82,7 @@ export default function FamiliesHomeScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
+      {/* Family list */}
       <Text style={[styles.title, theme.text]}>My families</Text>
       <FlatList
         data={families}
@@ -106,7 +111,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1, // 👈 מסגרת
+    borderWidth: 1, // Border around tile
   },
 
   title: { 
@@ -126,7 +131,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowRadius: 4,
     elevation: 1,
-    borderWidth: 1, // 👈 מסגרת
+    borderWidth: 1, // Border around card
   },
 
   familyAvatar: {

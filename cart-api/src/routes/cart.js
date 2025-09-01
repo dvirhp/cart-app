@@ -3,7 +3,7 @@ const Cart = require('../models/Cart');
 const requireAuth = require('../middleware/requireAuth');
 const { requireFamilyRole } = require('../middleware/requireFamilyRole');
 
-/* --- Get family cart --- */
+/* ---------------- GET FAMILY CART ---------------- */
 router.get('/:familyId', requireAuth, requireFamilyRole('member'), async (req, res) => {
   try {
     const cart = await Cart.findOne({ family: req.params.familyId });
@@ -14,7 +14,7 @@ router.get('/:familyId', requireAuth, requireFamilyRole('member'), async (req, r
   }
 });
 
-/* --- Add item --- */
+/* ---------------- ADD ITEM ---------------- */
 router.post('/:familyId/items', requireAuth, requireFamilyRole('member'), async (req, res) => {
   try {
     const { name, qty, notes } = req.body;
@@ -32,7 +32,7 @@ router.post('/:familyId/items', requireAuth, requireFamilyRole('member'), async 
   }
 });
 
-/* --- Update item --- */
+/* ---------------- UPDATE ITEM ---------------- */
 router.put('/:familyId/items/:index', requireAuth, requireFamilyRole('member'), async (req, res) => {
   try {
     const { name, qty, notes } = req.body;
@@ -54,7 +54,7 @@ router.put('/:familyId/items/:index', requireAuth, requireFamilyRole('member'), 
   }
 });
 
-/* --- Delete item --- */
+/* ---------------- DELETE ITEM ---------------- */
 router.delete('/:familyId/items/:index', requireAuth, requireFamilyRole('member'), async (req, res) => {
   try {
     const cart = await Cart.findOne({ family: req.params.familyId });
@@ -73,7 +73,7 @@ router.delete('/:familyId/items/:index', requireAuth, requireFamilyRole('member'
   }
 });
 
-/* --- Clear cart --- */
+/* ---------------- CLEAR CART ---------------- */
 router.delete('/:familyId', requireAuth, requireFamilyRole('member'), async (req, res) => {
   try {
     const cart = await Cart.findOne({ family: req.params.familyId });

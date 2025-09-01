@@ -9,7 +9,7 @@ const helmet = require('helmet');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 
-// --- Routes & Middleware ---
+// ---------------- ROUTES & MIDDLEWARE ----------------
 const familiesRoutes = require('./routes/families');
 const authRoutes = require('./routes/auth');
 const usersRoutes = require('./routes/users');
@@ -17,30 +17,30 @@ const requireAuth = require('./middleware/requireAuth');
 
 const app = express();
 
-// ---------- Middlewares בסיס ---------- //
-app.set('trust proxy', 1); // אם תריץ מאחורי פרוקסי/רנדאר/ורצל
-app.use(helmet());         // כותרות אבטחה בסיסיות
-app.use(compression());    // דחיסה
-app.use(cors());           // CORS (אפשר להקשיח origin לפי הצורך)
-app.use(express.json({ limit: '2mb' })); // גוף בקשות JSON
-app.use(morgan('dev'));    // לוגים לפיתוח
+// ---------------- CORE MIDDLEWARES ----------------
+app.set('trust proxy', 1);               // Required when running behind a proxy (e.g. Render/Vercel)
+app.use(helmet());                       // Basic security headers
+app.use(compression());                  // Response compression
+app.use(cors());                         // Enable CORS (can restrict origin if needed)
+app.use(express.json({ limit: '2mb' })); // JSON request body limit
+app.use(morgan('dev'));                  // Request logging for development
 
-// Rate limit קל על כל ה-API (אפשר להקשיח לפי צורך)
+// Global rate limit for API (can be hardened as needed)
 app.use('/api/', rateLimit({ windowMs: 15 * 60 * 1000, max: 1000 }));
 
-// ---------- Health ---------- //
+// ---------------- HEALTH CHECK ----------------
 app.get('/api/v1/health', (req, res) => res.json({ ok: true }));
 
-// ---------- Routes ---------- //
-// ⚠️ סדר חשוב: auth לפני requireAuth
+// ---------------- ROUTES ----------------
+// ⚠️ Order matters: auth must be loaded before routes requiring authentication
 app.use('/api/v1/auth', authRoutes);
 
-// ראוטים שדורשים התחברות
+// Routes requiring authentication
 app.use('/api/v1/users', requireAuth, usersRoutes);
 app.use('/api/v1/families', requireAuth, familiesRoutes);
-// אם תרצה בעתיד לפתוח חלק מהמסלולים לציבור – תוציא את requireAuth לרמת הראוטר הפנימית
+// If you want to make certain routes public later, move `requireAuth` inside the route files
 
-// ---------- 404 ---------- //
+// ---------------- 404 HANDLER ----------------
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/')) {
     return res.status(404).json({ error: 'Not found' });
@@ -48,12 +48,12 @@ app.use((req, res, next) => {
   next();
 });
 
-// ---------- Error Handler מרוכז ---------- //
+// ---------------- CENTRALIZED ERROR HANDLER ----------------
 /* eslint-disable no-unused-vars */
 app.use((err, req, res, next) => {
   console.error('❌ API error:', err);
 
-  // שגיאות ולידציה/מונגו נפוצות
+  // Common validation/MongoDB errors
   if (err.name === 'ValidationError') {
     return res.status(400).json({ error: 'Validation error', details: err.errors });
   }
@@ -68,7 +68,7 @@ app.use((err, req, res, next) => {
 });
 /* eslint-enable no-unused-vars */
 
-// ---------- Mongo & Server ---------- //
+// ---------------- MONGO CONNECTION & SERVER START ----------------
 const PORT = process.env.PORT || 3000;
 
 mongoose

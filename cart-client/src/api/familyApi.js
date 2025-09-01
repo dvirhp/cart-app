@@ -1,5 +1,6 @@
 const API_BASE = "http://localhost:3000/api/v1";
 
+// ---------------- FAMILY OPERATIONS ----------------
 export async function listFamilies(token) {
   const r = await fetch(`${API_BASE}/families`, {
     headers: { Authorization: `Bearer ${token}` }
@@ -54,7 +55,7 @@ export async function deleteFamily(familyId, token) {
   return r.json();
 }
 
-/* ---------- NEW: Update description ---------- */
+// ---------------- FAMILY UPDATES ----------------
 export async function updateFamilyDescription(familyId, description, token) {
   const r = await fetch(`${API_BASE}/families/${familyId}/description`, {
     method: 'PUT',
@@ -67,7 +68,6 @@ export async function updateFamilyDescription(familyId, description, token) {
   return r.json();
 }
 
-/* ---------- NEW: Update avatar ---------- */
 export async function updateFamilyAvatar(familyId, file, token) {
   const formData = new FormData();
   formData.append('avatar', file);
@@ -80,6 +80,7 @@ export async function updateFamilyAvatar(familyId, file, token) {
   return r.json();
 }
 
+// ---------------- CART & MEMBERS ----------------
 export async function getFamilyCart(familyId, token) {
   const r = await fetch(`${API_BASE}/families/${familyId}/cart`, {
     headers: { Authorization: `Bearer ${token}` }

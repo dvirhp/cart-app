@@ -12,14 +12,14 @@ const { requireFamilyRole } = require('../middleware/requireFamilyRole');
 
 const router = express.Router();
 
-/* ---------------- CLOUDINARY CONFIG ---------------- */
+/* ---------------- CLOUDINARY CONFIGURATION ---------------- */
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-/* ---------------- MULTER STORAGE ---------------- */
+/* ---------------- MULTER STORAGE (Cloudinary) ---------------- */
 const storage = new CloudinaryStorage({
   cloudinary,
   params: {
@@ -31,7 +31,7 @@ const storage = new CloudinaryStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
+  limits: { fileSize: 2 * 1024 * 1024 }, // ⛔ Maximum 2MB
   fileFilter: (req, file, cb) => {
     if (!/image\/(jpe?g|png)/.test(file.mimetype)) {
       return cb(new Error('Only JPG/PNG images allowed'), false);
@@ -53,7 +53,7 @@ router.post('/', requireAuth, upload.single('avatar'), async (req, res, next) =>
 
     let avatarUrl = null;
     if (req.file) {
-      avatarUrl = req.file.path; // Cloudinary מחזיר URL
+      avatarUrl = req.file.path; // Cloudinary returns URL
       console.log("✅ Uploaded to Cloudinary:", avatarUrl);
     }
 
@@ -141,7 +141,7 @@ router.get('/', requireAuth, async (req, res, next) => {
   }
 });
 
-/* ---------------- FAMILY DETAILS ---------------- */
+/* ---------------- GET FAMILY DETAILS ---------------- */
 router.get('/:id', requireAuth, requireFamilyRole('member'), async (req, res, next) => {
   try {
     const family = await Family.findById(req.params.id).lean();
@@ -153,7 +153,7 @@ router.get('/:id', requireAuth, requireFamilyRole('member'), async (req, res, ne
       family: family._id,
       status: 'active',
     })
-      .populate('user', 'email _id avatar displayName') // 👈 נמשוך גם avatar וגם displayName
+      .populate('user', 'email _id avatar displayName') // Include avatar and displayName fields
       .lean();
 
     res.json({
@@ -167,7 +167,7 @@ router.get('/:id', requireAuth, requireFamilyRole('member'), async (req, res, ne
         _id: m.user._id,
         email: m.user.email,
         displayName: m.user.displayName || null,
-        avatar: m.user.avatar || null,   // 👈 כאן הוספתי
+        avatar: m.user.avatar || null,   // Include avatar in response
         role: m.role,
       })),
     });
@@ -176,8 +176,7 @@ router.get('/:id', requireAuth, requireFamilyRole('member'), async (req, res, ne
   }
 });
 
-
-/* ---------------- JOIN BY CODE ---------------- */
+/* ---------------- JOIN FAMILY BY CODE ---------------- */
 router.post('/join-by-code', requireAuth, async (req, res, next) => {
   try {
     const { code } = req.body;
@@ -272,7 +271,7 @@ router.put('/:id/description', requireAuth, requireFamilyRole('member'), async (
   }
 });
 
-// Remove member (only owner)
+/* ---------------- REMOVE MEMBER (OWNER ONLY) ---------------- */
 router.delete('/:id/members/:userId', requireAuth, requireFamilyRole('owner'), async (req, res, next) => {
   try {
     const { id, userId } = req.params;
@@ -291,6 +290,5 @@ router.delete('/:id/members/:userId', requireAuth, requireFamilyRole('owner'), a
     next(err);
   }
 });
-
 
 module.exports = router;
