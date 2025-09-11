@@ -31,7 +31,7 @@ const upload = multer({
   limits: { fileSize: 2 * 1024 * 1024 }, // ⛔ Maximum 2MB
   fileFilter: (req, file, cb) => {
     if (!/image\/(jpe?g|png)/.test(file.mimetype)) {
-      return cb(new Error('Only JPG/PNG images allowed'), false);
+      return cb(new Error('רק תמונות JPG/PNG מותרות'), false);
     }
     cb(null, true);
   }
@@ -63,13 +63,13 @@ router.post(
   body('firstName').isLength({ min: 2 }),
   body('lastName').isLength({ min: 2 }),
   body('birthDate').isISO8601().custom((value) => {
-    if (new Date(value) > new Date()) throw new Error('Birth date cannot be in the future');
+    if (new Date(value) > new Date()) throw new Error('תאריך לידה לא יכול להיות בעתיד');
     return true;
   }),
   body('phone').matches(/^[0-9]{9,15}$/),
   body('address')
     .optional({ checkFalsy: true }) 
-    .isString().withMessage('Invalid value'),  
+    .isString().withMessage('ערך לא תקין'),  
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
@@ -78,7 +78,7 @@ router.post(
     const displayName = `${firstName} ${lastName}`;
 
     const exists = await User.findOne({ email });
-    if (exists) return res.status(409).json({ error: 'Email already in use' });
+    if (exists) return res.status(409).json({ error: 'האימייל כבר בשימוש' });
 
     const passwordHash = await bcrypt.hash(password, 10);
     const code = genCode6();
@@ -104,9 +104,9 @@ router.post(
     try {
       await sendMail({
         to: email,
-        subject: 'Cart – Verification Code (6 digits)',
-        text: `Your verification code: ${code}`,
-        html: `<p>Your verification code: <b>${code}</b> (valid for 10 minutes)</p>`,
+        subject: 'Cart – קוד אימות (6 ספרות)',
+        text: `קוד האימות שלך: ${code}`,
+        html: `<p>קוד האימות שלך: <b>${code}</b> (בתוקף ל־10 דקות)</p>`,
       });
     } catch (e) {
       console.error('MAIL ERROR:', e.message);
@@ -125,17 +125,16 @@ router.post('/login',
     const { email, password } = req.body;
 
     const user = await User.findOne({ email });
-    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+    if (!user) return res.status(401).json({ error: 'פרטי ההתחברות שגויים' });
 
     const ok = await bcrypt.compare(password, user.passwordHash);
-    if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
+    if (!ok) return res.status(401).json({ error: 'פרטי ההתחברות שגויים' });
 
-    // 🔑 Ensure the email has been verified
     if (!user.emailVerifiedAt) {
       return res.status(403).json({
         verifyRequired: true,
         email,
-        error: 'Email not verified'
+        error: 'המייל לא אומת, יש להזין את קוד האימות שנשלח'
       });
     }
 
@@ -153,7 +152,7 @@ router.post('/verify',
     const { email, code } = req.body;
 
     const user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!user) return res.status(404).json({ error: 'המשתמש לא נמצא' });
 
     if (user.emailVerifiedAt) {
       const token = sign(user);
@@ -161,17 +160,17 @@ router.post('/verify',
     }
 
     if (!user.verifyCodeHash || !user.verifyCodeExpiresAt || user.verifyCodeExpiresAt < new Date()) {
-      return res.status(400).json({ error: 'Code expired. Please resend.' });
+      return res.status(400).json({ error: 'הקוד פג תוקף, יש לבקש קוד חדש' });
     }
 
     if (user.verifyCodeAttempts >= 5) {
-      return res.status(429).json({ error: 'Too many attempts. Resend code.' });
+      return res.status(429).json({ error: 'יותר מדי ניסיונות שגויים, יש לבקש קוד חדש' });
     }
 
     const ok = (hashCode(code) === user.verifyCodeHash);
     if (!ok) {
       await User.updateOne({ _id: user._id }, { $inc: { verifyCodeAttempts: 1 } });
-      return res.status(400).json({ error: 'Invalid code' });
+      return res.status(400).json({ error: 'קוד לא תקין' });
     }
 
     user.emailVerifiedAt = new Date();
@@ -191,8 +190,8 @@ router.post('/resend',
   async (req, res) => {
     const { email } = req.body;
     const user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    if (user.emailVerifiedAt) return res.status(400).json({ error: 'Already verified' });
+    if (!user) return res.status(404).json({ error: 'המשתמש לא נמצא' });
+    if (user.emailVerifiedAt) return res.status(400).json({ error: 'המייל כבר אומת' });
 
     const code = genCode6();
     user.verifyCodeHash = hashCode(code);
@@ -205,9 +204,9 @@ router.post('/resend',
     try {
       await sendMail({
         to: email,
-        subject: 'Cart – New Verification Code',
-        text: `Code: ${code}`,
-        html: `<p>New verification code: <b>${code}</b> (valid for 10 minutes)</p>`,
+        subject: 'Cart – קוד אימות חדש',
+        text: `קוד חדש: ${code}`,
+        html: `<p>קוד חדש: <b>${code}</b> (בתוקף ל־10 דקות)</p>`,
       });
     } catch (e) {
       console.error('MAIL RESEND ERROR:', e.message);
@@ -234,7 +233,7 @@ router.put('/me/update',
   async (req, res) => {
     const { firstName, lastName, birthDate, phone, address } = req.body;
     const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!user) return res.status(404).json({ error: 'המשתמש לא נמצא' });
 
     if (firstName !== undefined) user.firstName = firstName;
     if (lastName !== undefined) user.lastName = lastName;
@@ -247,7 +246,7 @@ router.put('/me/update',
     }
 
     await user.save();
-    return res.json({ message: 'Profile updated successfully', user: user.toJSON() });
+    return res.json({ message: 'הפרופיל עודכן בהצלחה', user: user.toJSON() });
   }
 );
 
@@ -258,15 +257,15 @@ router.post('/change-password', requireAuth, async (req, res) => {
     const userId = req.user.id;
 
     if (!currentPassword || !newPassword) {
-      return res.status(400).json({ error: 'Missing fields' });
+      return res.status(400).json({ error: 'חסרים פרטים' });
     }
 
     const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!user) return res.status(404).json({ error: 'המשתמש לא נמצא' });
 
     const isMatch = await bcrypt.compare(currentPassword, user.passwordHash);
     if (!isMatch) {
-      return res.status(400).json({ error: 'Current password is incorrect' });
+      return res.status(400).json({ error: 'הסיסמה הנוכחית שגויה' });
     }
 
     user.passwordHash = await bcrypt.hash(newPassword, 10);
@@ -275,7 +274,7 @@ router.post('/change-password', requireAuth, async (req, res) => {
     return res.json({ success: true });
   } catch (err) {
     console.error('❌ Change password error:', err);
-    return res.status(500).json({ error: 'Server error' });
+    return res.status(500).json({ error: 'שגיאת שרת' });
   }
 });
 
@@ -287,19 +286,19 @@ router.post('/upload-avatar', requireAuth, upload.single('avatar'), async (req, 
 
   try {
     if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
+      return res.status(400).json({ error: 'לא הועלה קובץ' });
     }
 
     const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!user) return res.status(404).json({ error: 'המשתמש לא נמצא' });
 
     user.avatar = req.file.path; // Cloudinary returns a URL
     await user.save();
 
-    return res.json({ message: 'Avatar updated', user: user.toJSON() });
+    return res.json({ message: 'התמונה עודכנה בהצלחה', user: user.toJSON() });
   } catch (err) {
-    console.error("❌ UPLOAD ERROR:", err); // 👈 Logs the real error
-    return res.status(500).json({ error: 'Server error', details: err.message });
+    console.error("❌ UPLOAD ERROR:", err);
+    return res.status(500).json({ error: 'שגיאת שרת', details: err.message });
   }
 });
 
@@ -307,33 +306,30 @@ router.post('/upload-avatar', requireAuth, upload.single('avatar'), async (req, 
 router.post('/forgot-password', async (req, res) => {
   try {
     const { email } = req.body;
-    if (!email) return res.status(400).json({ error: 'Email required' });
+    if (!email) return res.status(400).json({ error: 'יש להזין אימייל' });
 
     const user = await User.findOne({ email });
     if (!user) {
-      // Do not expose whether the user exists or not
-      return res.json({ ok: true, message: 'If the email exists, code was sent' });
+      return res.json({ ok: true, message: 'אם האימייל קיים, נשלח אליו קוד' });
     }
 
-    // Generate 6-digit reset code
     const code = String(Math.floor(100000 + Math.random() * 900000));
     const codeHash = crypto.createHash('sha256').update(code).digest('hex');
 
-    // ✅ Direct update without running validations
     await User.updateOne(
       { _id: user._id },
       {
         resetPasswordCode: codeHash,
-        resetPasswordExpires: new Date(Date.now() + 10 * 60 * 1000) // Expires in 10 minutes
+        resetPasswordExpires: new Date(Date.now() + 10 * 60 * 1000)
       }
     );
 
     console.log("📩 Password reset code for", email, "is:", code);
 
-    res.json({ ok: true, message: 'If the email exists, code was sent' });
+    res.json({ ok: true, message: 'אם האימייל קיים, נשלח אליו קוד' });
   } catch (err) {
     console.error('❌ Forgot password error:', err);
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: 'שגיאת שרת' });
   }
 });
 
@@ -342,24 +338,23 @@ router.post('/reset-password', async (req, res) => {
   try {
     const { email, code, newPassword } = req.body;
     if (!email || !code || !newPassword) {
-      return res.status(400).json({ error: 'Missing fields' });
+      return res.status(400).json({ error: 'חסרים פרטים' });
     }
 
     const user = await User.findOne({ email });
     if (!user || !user.resetPasswordCode || !user.resetPasswordExpires) {
-      return res.status(400).json({ error: 'Invalid or expired reset attempt' });
+      return res.status(400).json({ error: 'ניסיון איפוס לא תקין או שפג תוקף' });
     }
 
     if (user.resetPasswordExpires < new Date()) {
-      return res.status(400).json({ error: 'Reset code expired' });
+      return res.status(400).json({ error: 'קוד האיפוס פג תוקף' });
     }
 
     const codeHash = crypto.createHash('sha256').update(code).digest('hex');
     if (codeHash !== user.resetPasswordCode) {
-      return res.status(400).json({ error: 'Invalid reset code' });
+      return res.status(400).json({ error: 'קוד האיפוס שגוי' });
     }
 
-    // ✅ Direct password update
     const newHash = await bcrypt.hash(newPassword, 10);
 
     await User.updateOne(
@@ -371,10 +366,10 @@ router.post('/reset-password', async (req, res) => {
       }
     );
 
-    res.json({ ok: true, message: 'Password reset successful' });
+    res.json({ ok: true, message: 'הסיסמה אופסה בהצלחה' });
   } catch (err) {
     console.error('❌ Reset password error:', err);
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: 'שגיאת שרת' });
   }
 });
 
@@ -386,13 +381,13 @@ router.delete('/delete-account', requireAuth, async (req, res) => {
     const deletedUser = await User.findByIdAndDelete(userId);
 
     if (!deletedUser) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(404).json({ error: 'המשתמש לא נמצא' });
     }
 
-    return res.json({ success: true, message: 'Account deleted successfully' });
+    return res.json({ success: true, message: 'החשבון נמחק בהצלחה' });
   } catch (err) {
     console.error('❌ deleteAccount error:', err.message);
-    return res.status(500).json({ error: 'Server error while deleting account' });
+    return res.status(500).json({ error: 'שגיאת שרת בעת מחיקת חשבון' });
   }
 });
 

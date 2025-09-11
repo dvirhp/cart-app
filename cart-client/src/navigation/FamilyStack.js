@@ -1,6 +1,7 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useTheme } from '../context/ThemeContext';
+
 import FamiliesHomeScreen from '../screens/familyScreens/FamiliesHomeScreen';
 import FamilyDetailsScreen from '../screens/familyScreens/FamilyDetailsScreen';
 import CreateFamilyScreen from '../screens/familyScreens/CreateFamilyScreen';
@@ -17,31 +18,33 @@ export default function FamilyStack() {
         headerStyle: {
           backgroundColor: theme.container.backgroundColor, // Themed header background
         },
-        headerTintColor: theme.text.color, // Themed back arrow and text color
+        headerTintColor: theme.text.color, // Back arrow + text color
         headerTitleStyle: {
           color: theme.text.color, // Themed header title
+          textAlign: 'right',      // Align Hebrew titles to the right
         },
+        headerBackTitleVisible: false, // Hide default back text
       }}
     >
       <Stack.Screen 
         name="FamiliesHome" 
         component={FamiliesHomeScreen} 
-        options={{ title: 'Families' }} 
+        options={{ title: 'משפחות', headerTitleAlign: 'center' }} 
       />
       <Stack.Screen 
         name="CreateFamily" 
         component={CreateFamilyScreen} 
-        options={{ title: 'Create family' }} 
+        options={{ title: 'דף משפחות' }} 
       />
       <Stack.Screen 
         name="JoinFamily" 
         component={JoinFamilyScreen} 
-        options={{ title: 'Join family' }} 
+        options={{ title: 'דף משפחות' }} 
       />
       <Stack.Screen 
         name="FamilyDetails" 
         component={FamilyDetailsScreen} 
-        options={{ title: 'Family details' }} 
+        options={{ title: 'דף משפחות' }} 
       />
     </Stack.Navigator>
   );

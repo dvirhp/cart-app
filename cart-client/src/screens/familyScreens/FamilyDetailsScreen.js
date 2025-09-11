@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, Button, FlatList, StyleSheet,
-  TouchableOpacity, Image, TextInput, Platform, Alert, Linking
+  TouchableOpacity, Image, TextInput, Platform, Alert, ScrollView
 } from 'react-native';
 import { 
   getFamily, 
@@ -9,21 +9,25 @@ import {
   leaveFamily, 
   updateFamilyDescription, 
   updateFamilyAvatar,
-  getFamilyCart,
   removeMember
 } from '../../api/familyApi';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import Icon from 'react-native-vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
-import * as Clipboard from 'expo-clipboard';
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
-/* ---------------- CROSS-PLATFORM ALERT ---------------- */
+/* --- Cross-platform alert helper (Web uses confirm, Mobile uses Alert) --- */
 function showAlert(title, msg, buttons) {
   if (Platform.OS === 'web') {
-    window.alert(`${title}\n\n${msg}`);
-    if (buttons && buttons.find(b => b.onPress)) {
-      buttons.find(b => b.onPress).onPress();
+    const confirmed = window.confirm(`${title}\n\n${msg}`);
+    if (confirmed) {
+      const destructive = buttons?.find(b => b.style === 'destructive');
+      if (destructive?.onPress) destructive.onPress();
+    } else {
+      const cancelBtn = buttons?.find(b => b.style === 'cancel');
+      if (cancelBtn?.onPress) cancelBtn.onPress();
     }
   } else {
     Alert.alert(title, msg, buttons);
@@ -34,58 +38,44 @@ export default function FamilyDetailsScreen({ route, navigation }) {
   const { familyId } = route.params;
   const { token, user } = useAuth();
   const { theme } = useTheme();
+  const tabBarHeight = useBottomTabBarHeight();
+  const queryClient = useQueryClient();
 
-  const [family, setFamily] = useState(null);
-  const [isOwner, setIsOwner] = useState(false);
   const [description, setDescription] = useState('');
   const [editingDescription, setEditingDescription] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [cart, setCart] = useState([]);
 
-  // ---------------- LOAD DATA ----------------
-  async function load() {
-    const res = await getFamily(familyId, token);
-    if (res.error) { showAlert('Error', res.error); return; }
-    setFamily(res);
-    setDescription(res.description || '');
-    setIsOwner(String(res.owner) === String(user.id));
-  }
+  // --- Load family data with React Query ---
+  const { data: family, refetch } = useQuery({
+    queryKey: ['family', familyId],
+    queryFn: () => getFamily(familyId, token),
+    onSuccess: (res) => {
+      setDescription(res.description || '');
+    }
+  });
 
-  async function loadCart() {
-    const res = await getFamilyCart(familyId, token);
-    if (!res.error) setCart(res.items || []);
-  }
+  const isOwner = family && String(family.owner) === String(user.id);
+  const owner = family?.members?.find(m => m.role === 'owner');
 
-  useEffect(() => { 
-    load(); 
-    loadCart();
-  }, [familyId, token]);
+  // --- Mutation: update family avatar ---
+  const avatarMutation = useMutation({
+    mutationFn: async (file) => updateFamilyAvatar(familyId, file, token),
+    onSuccess: () => {
+      showAlert('הצלחה', 'התמונה עודכנה בהצלחה');
+      queryClient.invalidateQueries(['families']);
+      queryClient.invalidateQueries(['carts']);
+      refetch();
+    },
+    onError: (err) => showAlert('שגיאה', err.message),
+  });
 
-  // ---------------- UPDATE AVATAR ----------------
   async function changeAvatar() {
     if (Platform.OS === 'web') {
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = 'image/*';
-      input.onchange = async (e) => {
+      input.onchange = (e) => {
         const file = e.target.files[0];
-        if (file) {
-          try {
-            setLoading(true);
-            const res = await updateFamilyAvatar(familyId, file, token); 
-            if (res.error) {
-              showAlert('Error', res.error);
-            } else {
-              showAlert('Success', 'Family avatar updated');
-              await load();
-            }
-          } catch (err) {
-            showAlert('Error', err.message);
-          } finally {
-            setLoading(false);
-          }
-        }
+        if (file) avatarMutation.mutate(file);
       };
       input.click();
       return;
@@ -98,132 +88,114 @@ export default function FamilyDetailsScreen({ route, navigation }) {
       quality: 1,
     });
     if (!result.canceled) {
-      try {
-        setLoading(true);
-        const file = {
-          uri: result.assets[0].uri,
-          type: 'image/jpeg',
-          name: 'avatar.jpg'
-        };
-        const res = await updateFamilyAvatar(familyId, file, token);
-        if (res.error) {
-          showAlert('Error', res.error);
-        } else {
-          showAlert('Success', 'Family avatar updated');
-          await load();
-        }
-      } catch (err) {
-        showAlert('Error', err.message);
-      } finally {
-        setLoading(false);
-      }
+      const file = {
+        uri: result.assets[0].uri,
+        type: 'image/jpeg',
+        name: 'avatar.jpg',
+      };
+      avatarMutation.mutate(file);
     }
   }
 
-  // ---------------- UPDATE DESCRIPTION ----------------
-  async function saveDescription() {
-    try {
-      setLoading(true);
-      const res = await updateFamilyDescription(familyId, description, token);
-      if (res.error) {
-        showAlert('Error', res.error);
-      } else {
-        showAlert('Success', 'Description updated');
-        await load();
-      }
-    } catch (err) {
-      showAlert('Error', err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
+  // --- Mutation: update family description ---
+  const descMutation = useMutation({
+    mutationFn: () => updateFamilyDescription(familyId, description, token),
+    onSuccess: () => {
+      showAlert('הצלחה', 'התיאור עודכן בהצלחה');
+      queryClient.invalidateQueries(['families']);
+      refetch();
+    },
+    onError: (err) => showAlert('שגיאה', err.message),
+  });
 
-  // ---------------- DELETE / LEAVE FAMILY ----------------
+  // --- Delete family (owner only) ---
   async function onDeleteFamily() {
-    showAlert('Delete Family', 'Are you sure? This action is permanent.', [
-      { text: 'Cancel' },
+    showAlert('מחיקת משפחה', 'האם אתה בטוח שברצונך למחוק את המשפחה?', [
+      { text: 'ביטול', style: 'cancel' },
       {
-        text: 'Delete',
+        text: 'מחק',
         style: 'destructive',
         onPress: async () => {
           const r = await deleteFamily(familyId, token);
-          if (r.message) { 
-            showAlert('Deleted', 'Family was removed'); 
-            navigation.goBack(); 
+          if (r.message) {
+            showAlert('נמחק', 'המשפחה הוסרה בהצלחה');
+            queryClient.invalidateQueries(['families']);
+            queryClient.invalidateQueries(['carts']);
+            navigation.goBack();
           } else {
-            showAlert('Error', r.error || 'Failed to delete family');
+            showAlert('שגיאה', r.error || 'מחיקת המשפחה נכשלה');
           }
         }
       }
     ]);
   }
 
+  // --- Leave family (for non-owners) ---
   async function onLeaveFamily() {
-    const r = await leaveFamily(familyId, token);
-    if (r.message) { 
-      showAlert('Left', 'You left the family'); 
-      navigation.goBack(); 
-    }
-    else showAlert('Error', r.error || 'Failed to leave family');
-  }
-
-  // ---------------- REMOVE MEMBER (OWNER ONLY) ----------------
-  async function onRemoveMember(userId) {
-    showAlert('Remove Member', 'Are you sure you want to remove this member?', [
-      { text: 'Cancel' },
-      { text: 'Remove', style: 'destructive', onPress: async () => {
-        const res = await removeMember(familyId, userId, token);
-        if (res.message) {
-          showAlert('Removed', 'Member removed successfully');
-          await load();
-        } else {
-          showAlert('Error', res.error || 'Failed to remove member');
+    showAlert('עזיבת משפחה', 'האם אתה בטוח שברצונך לעזוב את המשפחה?', [
+      { text: 'ביטול', style: 'cancel' },
+      {
+        text: 'צא',
+        style: 'destructive',
+        onPress: async () => {
+          const r = await leaveFamily(familyId, token);
+          if (r.message) {
+            showAlert('יצאת', 'עזבת את המשפחה');
+            queryClient.invalidateQueries(['families']);
+            queryClient.invalidateQueries(['carts']);
+            navigation.goBack();
+          } else {
+            showAlert('שגיאה', r.error || 'הפעולה נכשלה');
+          }
         }
-      }}
+      }
     ]);
   }
 
-  // ---------------- SHARE HELPERS ----------------
-  function inviteMessage(code) {
-    return `You were invited to join the family "${family.name}" in the app!\nJoin code: ${code}\nOpen the app and enter the code to join.`;
-  }
-  function shareWhatsApp(code) {
-    const text = encodeURIComponent(inviteMessage(code));
-    const url = `whatsapp://send?text=${text}`;
-    Linking.openURL(url).catch(() => showAlert('Error', 'WhatsApp not available.'));
-  }
-  function shareEmail(code) {
-    const subject = encodeURIComponent('Cart – Family Invitation');
-    const body = encodeURIComponent(inviteMessage(code));
-    const url = `mailto:?subject=${subject}&body=${body}`;
-    Linking.openURL(url).catch(() => showAlert('Error', 'Email not available.'));
-  }
-  async function copyCode(code) {
-    await Clipboard.setStringAsync(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  // --- Remove member (owner only) ---
+  async function onRemoveMember(userId) {
+    showAlert('הסרת משתמש', 'האם אתה בטוח שברצונך להסיר את המשתמש?', [
+      { text: 'ביטול', style: 'cancel' },
+      {
+        text: 'הסר',
+        style: 'destructive',
+        onPress: async () => {
+          const res = await removeMember(familyId, userId, token);
+          if (res.message) {
+            showAlert('הוסר', 'המשתמש הוסר בהצלחה');
+            refetch();
+            queryClient.invalidateQueries(['families']);
+          } else {
+            showAlert('שגיאה', res.error || 'הסרת המשתמש נכשלה');
+          }
+        }
+      }
+    ]);
   }
 
-  // ---------------- RENDER ----------------
   if (!family) {
     return (
       <View style={[styles.container, theme.container]}>
-        <Text style={theme.text}>Loading…</Text>
+        <Text style={theme.text}>טוען...</Text>
       </View>
     );
   }
 
-  const owner = family.members.find(m => m.role === 'owner');
-
   return (
-    <View style={[styles.container, theme.container]}>
-      {/* Family avatar */}
+    <ScrollView
+      style={[styles.container, theme.container]}
+      contentContainerStyle={{ paddingBottom: 80 + tabBarHeight }}
+      showsVerticalScrollIndicator={false}
+      showsHorizontalScrollIndicator={false}
+      contentInsetAdjustmentBehavior="automatic"
+    >
+      {/* Family avatar and name */}
       <View style={[styles.header, theme.container]}>
-        <TouchableOpacity onPress={changeAvatar} activeOpacity={0.8} disabled={loading}>
+        <TouchableOpacity onPress={changeAvatar} activeOpacity={0.8} disabled={avatarMutation.isLoading}>
           {family.avatar ? (
             <Image source={{ uri: family.avatar }} style={styles.avatar} />
           ) : (
-            <View style={styles.avatarPlaceholder}>
+            <View className="avatarPlaceholder">
               <Icon name="people-outline" size={40} color="#666" />
             </View>
           )}
@@ -232,7 +204,10 @@ export default function FamilyDetailsScreen({ route, navigation }) {
           </View>
         </TouchableOpacity>
 
-        <Text style={[styles.familyName, theme.text]}>{family.name}</Text>
+        <Text style={[styles.familyName, theme.text, { textAlign: "right" }]}>
+          {family.name}
+        </Text>
+
         {owner && (
           <View style={styles.adminRow}>
             {owner.avatar ? (
@@ -243,83 +218,52 @@ export default function FamilyDetailsScreen({ route, navigation }) {
               </View>
             )}
             <Text style={[styles.adminText, theme.text]}>
-              Admin: {owner.email}
+              מנהל: {owner.email}
             </Text>
           </View>
         )}
       </View>
 
-      {/* Join code + invite actions */}
-      <View style={styles.section}>
-        <View style={[styles.sectionHeader, theme.container]}>
-          <Text style={[styles.sectionTitle, theme.text]}>Join Code</Text>
-          <TouchableOpacity onPress={() => copyCode(family.joinCode)}>
-            <Icon name="copy-outline" size={20} color={theme.text.color} />
-          </TouchableOpacity>
-        </View>
-
-        <Text style={[styles.codeText, theme.text]} selectable>
-          {family.joinCode}
-        </Text>
-        {copied && <Text style={styles.copiedText}>Copied!</Text>}
-
-        <View style={styles.shareRow}>
-          <Button title="Share on WhatsApp" onPress={() => shareWhatsApp(family.joinCode)} />
-          <View style={{ width: 8 }} />
-          <Button title="Share by Email" onPress={() => shareEmail(family.joinCode)} />
-        </View>
-      </View>
-
       {/* Description section */}
       <View style={styles.section}>
         <View style={[styles.sectionHeader, theme.container]}>
-          <Text style={[styles.sectionTitle, theme.text]}>Description</Text>
+          <Text style={[styles.sectionTitle, theme.text]}>תיאור</Text>
           {!editingDescription && (
             <TouchableOpacity onPress={() => setEditingDescription(true)}>
               <Icon name="pencil" size={18} color={theme.text.color} />
             </TouchableOpacity>
           )}
         </View>
-
         {!editingDescription ? (
-          <Text style={[styles.descriptionText, theme.text]}>
-            {description || "No description yet"}
+          <Text style={[styles.descriptionText, theme.text, { textAlign: "right" }]}>
+            {description || "אין עדיין תיאור"}
           </Text>
         ) : (
           <>
             <TextInput
               value={description}
               onChangeText={setDescription}
-              style={[styles.descriptionInput, { color: theme.text.color }]}
-              placeholder="Enter family description..."
+              style={[styles.descriptionInput, { color: theme.text.color, textAlign: "right" }]}
+              placeholder="הכנס תיאור למשפחה..."
               placeholderTextColor="#999"
               multiline
             />
-            <View style={styles.editButtons}>
-              <Button
-                title="Save"
-                onPress={async () => {
-                  await saveDescription();
-                  setEditingDescription(false);
-                }}
-              />
-              <View style={{ width: 8 }} />
-              <Button
-                title="Cancel"
-                color="#aaa"
-                onPress={() => {
-                  setEditingDescription(false);
-                  setDescription(family.description || "");
-                }}
-              />
-            </View>
+            <Button title="שמור" onPress={() => { descMutation.mutate(); setEditingDescription(false); }} />
           </>
         )}
       </View>
 
+      {/* Join code section */}
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, theme.text]}>קוד הצטרפות</Text>
+        <Text style={[styles.descriptionText, theme.text, { textAlign: "right" }]}>
+          {family.joinCode}
+        </Text>
+      </View>
+
       {/* Members section */}
       <View style={styles.section}>
-        <Text style={[styles.sectionTitle, theme.text]}>Members</Text>
+        <Text style={[styles.sectionTitle, theme.text]}>חברים</Text>
         <FlatList
           data={family.members}
           keyExtractor={(m) => m._id}
@@ -332,8 +276,8 @@ export default function FamilyDetailsScreen({ route, navigation }) {
                   <Icon name="person" size={16} color="#666" />
                 </View>
               )}
-              <Text style={[styles.memberName, theme.text]}>
-                {item.email} {item.role === 'owner' ? '(Admin)' : ''}
+              <Text style={[styles.memberName, theme.text, { textAlign: "right" }]}>
+                {item.email} {item.role === 'owner' ? '(מנהל)' : ''}
               </Text>
               {isOwner && item.role !== 'owner' && (
                 <TouchableOpacity onPress={() => onRemoveMember(item._id)} style={{ marginLeft: 'auto' }}>
@@ -342,49 +286,43 @@ export default function FamilyDetailsScreen({ route, navigation }) {
               )}
             </View>
           )}
+          scrollEnabled={false}
         />
       </View>
 
-      {/* Shopping cart section */}
+      {/* Family cart section */}
       <View style={styles.section}>
-        <Text style={[styles.sectionTitle, theme.text]}>Shopping Cart</Text>
-        {cart.length === 0 ? (
-          <Text style={theme.text}>Cart is empty</Text>
-        ) : (
-          <FlatList
-            data={cart}
-            keyExtractor={(item, index) => String(index)}
-            renderItem={({ item }) => (
-              <View style={styles.cartRow}>
-                <Text style={[styles.cartItem, theme.text]}>
-                  {item.name} (x{item.qty})
-                </Text>
-                {item.notes ? (
-                  <Text style={[styles.cartNotes, theme.text]}>{item.notes}</Text>
-                ) : null}
-              </View>
-            )}
-          />
-        )}
+        <Text style={[styles.sectionTitle, theme.text]}>עגלת המשפחה</Text>
+        <TouchableOpacity
+          style={styles.cartButton}
+          onPress={() => {
+            if (family.carts?.length > 0) {
+              navigation.navigate("ShoppingCart", {
+                screen: "CartDetails",
+                params: { cartId: family.carts[0]._id, from: "families" }
+              });
+            } else {
+              navigation.navigate("ShoppingCart", {
+                screen: "CartDetails",
+                params: { familyId, from: "families" }
+              });
+            }
+          }}
+        >
+          <Icon name="cart-outline" size={20} color="#fff" />
+          <Text style={styles.cartButtonText}>עבור לעגלת המשפחה</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Actions: delete or leave family */}
+      {/* Owner / Member actions */}
       <View style={styles.actions}>
         {isOwner ? (
-          <>
-            <Button title="Delete Family" color="#d9534f" onPress={onDeleteFamily} />
-            <View style={{ height: 12 }} />
-            <Button title="Leave Family" color="#aaa" disabled />
-          </>
+          <Button title="מחק משפחה" color="#d9534f" onPress={onDeleteFamily} />
         ) : (
-          <>
-            <Button title="Delete Family" color="#aaa" disabled />
-            <View style={{ height: 12 }} />
-            <Button title="Leave Family" color="#d9534f" onPress={onLeaveFamily} />
-          </>
+          <Button title="צא מהמשפחה" color="#d953f" onPress={onLeaveFamily} />
         )}
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -397,51 +335,36 @@ const styles = StyleSheet.create({
     backgroundColor: '#ddd', justifyContent: 'center', alignItems: 'center'
   },
   cameraOverlay: {
-    position: 'absolute',
-    bottom: 0, right: 0,
-    backgroundColor: '#4caf50',
-    borderRadius: 20,
-    padding: 6,
-    borderWidth: 2,
-    borderColor: '#fff'
+    position: 'absolute', bottom: 0, right: 0,
+    backgroundColor: '#4caf50', borderRadius: 20,
+    padding: 6, borderWidth: 2, borderColor: '#fff'
   },
-  familyName: { fontSize: 22, fontWeight: 'bold', marginTop: 12 },
-  adminRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
-  adminText: { fontSize: 14, marginLeft: 6 },
+  familyName: { fontSize: 22, fontWeight: 'bold' },
+  adminRow: { flexDirection: 'row-reverse', alignItems: 'center', marginTop: 6 },
+  adminText: { fontSize: 14, marginRight: 6, textAlign: "right" },
   section: { marginBottom: 20 },
-  sectionHeader: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center',
-    marginBottom: 6 
+  sectionHeader: { flexDirection: 'row-reverse', justifyContent: 'space-between', marginBottom: 6 },
+  sectionTitle: { fontSize: 18, fontWeight: '600', textAlign: "right" },
+  descriptionText: { fontSize: 15, lineHeight: 20 },
+  descriptionInput: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 8, minHeight: 60 },
+  memberRow: { flexDirection: 'row-reverse', alignItems: 'center', paddingVertical: 6 },
+  memberName: { fontSize: 16, marginRight: 8 },
+  memberAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#ddd', marginLeft: 8 },
+  memberAvatarPlaceholder: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#ddd', justifyContent: 'center', alignItems: 'center', marginLeft: 8 },
+  cartButton: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "green",
+    padding: 12,
+    borderRadius: 10,
+    marginTop: 10,
   },
-  sectionTitle: { fontSize: 18, fontWeight: '600' },
-  codeText: { fontSize: 20, textAlign: 'center', letterSpacing: 2, marginVertical: 6 },
-  copiedText: { textAlign: 'center', color: 'green', marginBottom: 6 },
-  shareRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 8 },
-  descriptionText: { fontSize: 15, lineHeight: 20, paddingVertical: 4 },
-  descriptionInput: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    padding: 8,
-    minHeight: 60,
-    marginBottom: 8,
-    textAlignVertical: 'top'
+  cartButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
+    marginRight: 8,
   },
-  editButtons: { flexDirection: 'row', marginTop: 8 },
-  memberRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
-  memberName: { fontSize: 16, marginLeft: 8 },
-  memberAvatar: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: '#ddd'
-  },
-  memberAvatarPlaceholder: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: '#ddd', justifyContent: 'center', alignItems: 'center'
-  },
-  cartRow: { paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#ddd' },
-  cartItem: { fontSize: 16, fontWeight: '500' },
-  cartNotes: { fontSize: 14, fontStyle: 'italic', color: '#555' },
-  actions: { marginTop: 24 }
+  actions: { marginTop: 24 },
 });

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import jwtDecode from 'jwt-decode'; // npm install jwt-decode
+import jwtDecode from 'jwt-decode'; // Utility for decoding JWT payload
 
 const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
@@ -12,6 +12,7 @@ export function AuthProvider({ children }) {
   const [rememberMe, setRememberMe] = useState(false);
 
   // ---------------- LOAD AUTH STATE ON APP START ----------------
+  // Restore saved token and user if "Remember Me" was selected
   useEffect(() => {
     (async () => {
       try {
@@ -24,7 +25,7 @@ export function AuthProvider({ children }) {
           setRememberMe(true);
         }
       } catch (err) {
-        console.error('❌ Failed to load auth state:', err);
+        console.error("❌ נכשל בטעינת מצב ההתחברות:", err);
       } finally {
         setReady(true);
       }
@@ -32,7 +33,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   // ---------------- NORMALIZE USER OBJECT ----------------
-  // Ensures that `id`, `email`, and `role` exist (from token or user object)
+  // Ensure consistent user structure based on provided object or token payload
   function normalizeUser(u, t) {
     if (u?.id && u?.email) return u;
     if (!t) return u;
@@ -50,7 +51,7 @@ export function AuthProvider({ children }) {
   }
 
   // ---------------- SIGN IN ----------------
-  // Save token and user to state + persistent storage if `remember` is true
+  // Persist token and user (if requested with "Remember Me")
   const signIn = async ({ token: newToken, user: newUser }, remember) => {
     const safeUser = normalizeUser(newUser, newToken);
 
@@ -69,12 +70,12 @@ export function AuthProvider({ children }) {
         await AsyncStorage.setItem('rememberMe', 'false');
       }
     } catch (err) {
-      console.error('❌ Failed to persist auth state:', err);
+      console.error("❌ נכשל בשמירת מצב ההתחברות:", err);
     }
   };
 
   // ---------------- UPDATE USER ----------------
-  // Merge updates into current user and persist if `rememberMe` is enabled
+  // Merge user updates and persist if "Remember Me" is active
   const updateUser = async (newUser) => {
     const merged = { ...(user || {}), ...(newUser || {}) };
     const safeUser = normalizeUser(merged, token);
@@ -83,13 +84,13 @@ export function AuthProvider({ children }) {
       try {
         await AsyncStorage.setItem('user', JSON.stringify(safeUser));
       } catch (err) {
-        console.error('❌ Failed to persist updated user:', err);
+        console.error("❌ נכשל בשמירת פרטי המשתמש המעודכנים:", err);
       }
     }
   };
 
   // ---------------- SIGN OUT ----------------
-  // Clear token and user from state and storage
+  // Clear authentication state from memory and storage
   const signOut = async () => {
     setToken(null);
     setUser(null);
@@ -99,7 +100,7 @@ export function AuthProvider({ children }) {
       await AsyncStorage.removeItem('user');
       await AsyncStorage.setItem('rememberMe', 'false');
     } catch (err) {
-      console.error('❌ Failed to clear auth state:', err);
+      console.error("❌ נכשל בניקוי מצב ההתחברות:", err);
     }
   };
 

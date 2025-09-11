@@ -14,7 +14,7 @@ const router = express.Router();
 
 /* ---------------- CLOUDINARY CONFIGURATION ---------------- */
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  cloud_name: process.env.CLOUDINARY_CLOUDINARY_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
@@ -34,7 +34,7 @@ const upload = multer({
   limits: { fileSize: 2 * 1024 * 1024 }, // ⛔ Maximum 2MB
   fileFilter: (req, file, cb) => {
     if (!/image\/(jpe?g|png)/.test(file.mimetype)) {
-      return cb(new Error('Only JPG/PNG images allowed'), false);
+      return cb(new Error('מותר להעלות רק תמונות בפורמט JPG/PNG'), false);
     }
     cb(null, true);
   },
@@ -48,7 +48,7 @@ router.post('/', requireAuth, upload.single('avatar'), async (req, res, next) =>
 
     const { name, description } = req.body;
     if (!name?.trim()) {
-      return res.status(400).json({ error: 'Family name is required' });
+      return res.status(400).json({ error: 'שם המשפחה הוא שדה חובה' });
     }
 
     let avatarUrl = null;
@@ -74,7 +74,13 @@ router.post('/', requireAuth, upload.single('avatar'), async (req, res, next) =>
       status: 'active',
     });
 
-    await Cart.create({ family: family._id, items: [] });
+    await Cart.create({
+      family: family._id,
+      name: family.name,        
+      avatar: family.avatar,     
+      items: [],
+      archived: false,
+    });
 
     res.status(201).json({ family });
   } catch (e) {
@@ -83,6 +89,7 @@ router.post('/', requireAuth, upload.single('avatar'), async (req, res, next) =>
   }
 });
 
+
 /* ---------------- UPDATE FAMILY AVATAR ---------------- */
 router.put('/:id/avatar', requireAuth, requireFamilyRole('owner'), upload.single('avatar'), async (req, res) => {
   try {
@@ -90,21 +97,21 @@ router.put('/:id/avatar', requireAuth, requireFamilyRole('owner'), upload.single
     console.log("📂 File received:", req.file);
 
     if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
+      return res.status(400).json({ error: 'לא הועלתה תמונה' });
     }
 
     const family = await Family.findById(req.params.id);
     if (!family) {
-      return res.status(404).json({ error: 'Family not found' });
+      return res.status(404).json({ error: 'משפחה לא נמצאה' });
     }
 
     family.avatar = req.file.path; // Cloudinary URL
     await family.save();
 
-    return res.json({ message: 'Family avatar updated', family });
+    return res.json({ message: 'תמונת המשפחה עודכנה בהצלחה', family });
   } catch (err) {
     console.error("❌ Family avatar update error:", err);
-    return res.status(500).json({ error: 'Server error', details: err.message });
+    return res.status(500).json({ error: 'שגיאת שרת', details: err.message });
   }
 });
 
@@ -146,7 +153,7 @@ router.get('/:id', requireAuth, requireFamilyRole('member'), async (req, res, ne
   try {
     const family = await Family.findById(req.params.id).lean();
     if (!family) {
-      return res.status(404).json({ error: 'Family not found' });
+      return res.status(404).json({ error: 'משפחה לא נמצאה' });
     }
 
     const members = await Membership.find({
@@ -181,12 +188,12 @@ router.post('/join-by-code', requireAuth, async (req, res, next) => {
   try {
     const { code } = req.body;
     if (!code?.trim()) {
-      return res.status(400).json({ error: 'Join code is required' });
+      return res.status(400).json({ error: 'נדרש קוד הצטרפות' });
     }
 
     const family = await Family.findOne({ joinCode: code.trim() });
     if (!family) {
-      return res.status(400).json({ error: 'Invalid join code' });
+      return res.status(400).json({ error: 'קוד הצטרפות לא תקין' });
     }
 
     await Membership.updateOne(
@@ -196,7 +203,7 @@ router.post('/join-by-code', requireAuth, async (req, res, next) => {
     );
 
     res.json({
-      message: 'Joined family successfully',
+      message: 'הצטרפת בהצלחה למשפחה',
       familyId: family._id,
       family: {
         _id: family._id,
@@ -216,13 +223,13 @@ router.post('/:id/leave', requireAuth, requireFamilyRole('member'), async (req, 
   try {
     const family = await Family.findById(req.params.id);
     if (!family) {
-      return res.status(404).json({ error: 'Family not found' });
+      return res.status(404).json({ error: 'משפחה לא נמצאה' });
     }
 
     if (String(family.owner) === req.user.id) {
       return res
         .status(400)
-        .json({ error: 'Owner cannot leave; delete the family instead' });
+        .json({ error: 'מנהל לא יכול לעזוב את המשפחה, יש למחוק את המשפחה במקום' });
     }
 
     await Membership.updateOne(
@@ -230,7 +237,7 @@ router.post('/:id/leave', requireAuth, requireFamilyRole('member'), async (req, 
       { $set: { status: 'removed' } }
     );
 
-    res.json({ message: 'Left family successfully' });
+    res.json({ message: 'יצאת מהמשפחה בהצלחה' });
   } catch (e) {
     next(e);
   }
@@ -245,7 +252,7 @@ router.delete('/:id', requireAuth, requireFamilyRole('owner'), async (req, res, 
     await Cart.deleteOne({ family: familyId });
     await Family.deleteOne({ _id: familyId });
 
-    res.json({ message: 'Family deleted successfully' });
+    res.json({ message: 'המשפחה נמחקה בהצלחה' });
   } catch (e) {
     next(e);
   }
@@ -258,16 +265,16 @@ router.put('/:id/description', requireAuth, requireFamilyRole('member'), async (
 
     const family = await Family.findById(req.params.id);
     if (!family) {
-      return res.status(404).json({ error: 'Family not found' });
+      return res.status(404).json({ error: 'משפחה לא נמצאה' });
     }
 
     family.description = description?.trim() || '';
     await family.save();
 
-    res.json({ message: 'Family description updated', family });
+    res.json({ message: 'התיאור עודכן בהצלחה', family });
   } catch (err) {
     console.error("❌ Family description update error:", err);
-    res.status(500).json({ error: 'Server error', details: err.message });
+    res.status(500).json({ error: 'שגיאת שרת', details: err.message });
   }
 });
 
@@ -276,16 +283,16 @@ router.delete('/:id/members/:userId', requireAuth, requireFamilyRole('owner'), a
   try {
     const { id, userId } = req.params;
     if (String(req.user.id) === String(userId)) {
-      return res.status(400).json({ error: 'Owner cannot remove themselves' });
+      return res.status(400).json({ error: 'מנהל לא יכול להסיר את עצמו' });
     }
 
     const membership = await Membership.findOne({ family: id, user: userId });
     if (!membership) {
-      return res.status(404).json({ error: 'Member not found' });
+      return res.status(404).json({ error: 'משתמש לא נמצא' });
     }
 
     await membership.deleteOne();
-    res.json({ message: 'Member removed successfully' });
+    res.json({ message: 'המשתמש הוסר בהצלחה' });
   } catch (err) {
     next(err);
   }

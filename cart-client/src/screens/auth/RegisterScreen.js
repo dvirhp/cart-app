@@ -1,17 +1,17 @@
 import React, { useState } from 'react';
 import { 
   View, Text, TextInput, Button, Alert, 
-  Platform, StyleSheet, ScrollView, SafeAreaView 
+  Platform, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity
 } from 'react-native';
 import { register } from '../../api/client';
 import { useTheme } from '../../context/ThemeContext';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
 
-const DatePicker = ({ date, setDate }) => {
+/* ---------- Custom DatePicker ---------- */
+const DatePicker = ({ date, setDate, theme }) => {
   const [show, setShow] = useState(false);
 
-  // ---------------- WEB IMPLEMENTATION ----------------
   if (Platform.OS === 'web') {
     return (
       <input
@@ -28,17 +28,20 @@ const DatePicker = ({ date, setDate }) => {
           width: '100%',
           marginTop: 8,
           marginBottom: 12,
+          backgroundColor: theme.container.backgroundColor,
+          color: theme.text.color,
+          direction: 'rtl',
+          textAlign: 'right',
         }}
       />
     );
   }
 
-  // ---------------- MOBILE IMPLEMENTATION ----------------
   return (
     <View style={{ marginBottom: 12 }}>
-      <Button title="Select Birth Date" onPress={() => setShow(true)} />
-      <Text style={{ marginTop: 8 }}>
-        Selected: {date instanceof Date ? date.toDateString() : 'No date selected'}
+      <Button title="בחר תאריך לידה" onPress={() => setShow(true)} />
+      <Text style={{ marginTop: 8, color: theme.text.color }}>
+        נבחר: {date instanceof Date ? date.toDateString() : 'לא נבחר תאריך'}
       </Text>
 
       {show && (
@@ -58,7 +61,7 @@ const DatePicker = ({ date, setDate }) => {
   );
 };
 
-// ---------------- ALERT WRAPPER ----------------
+// Cross-platform alert helper
 const showAlert = (title, msg) => {
   if (Platform.OS === 'web') window.alert(`${title}\n${msg}`);
   else Alert.alert(title, msg);
@@ -71,7 +74,7 @@ export default function RegisterScreen({ navigation }) {
   const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
-  const [gender, setGender] = useState('other'); // Gender state
+  const [gender, setGender] = useState('other'); 
   const [birthDate, setBirthDate] = useState(new Date());
 
   const [loading, setLoading] = useState(false);
@@ -79,29 +82,26 @@ export default function RegisterScreen({ navigation }) {
 
   const { theme } = useTheme();
 
-  // ---------------- VALIDATION ----------------
   const validate = () => {
-    if (!firstName.trim()) return 'First name is required';
-    if (!lastName.trim()) return 'Last name is required';
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return 'Invalid email format';
-    if (password.length < 6) return 'Password must be at least 6 characters long';
-    if (!/^[0-9]{9,15}$/.test(phone)) return 'Phone number must be digits (9–15)';
+    if (!firstName.trim()) return 'יש להזין שם פרטי';
+    if (!lastName.trim()) return 'יש להזין שם משפחה';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return 'פורמט אימייל שגוי';
+    if (password.length < 6) return 'הסיסמה חייבת להכיל לפחות 6 תווים';
+    if (!/^[0-9]{9,15}$/.test(phone)) return 'מספר טלפון חייב להכיל 9–15 ספרות';
     return null;
   };
 
-  // ---------------- SUBMIT HANDLER ----------------
   const onSubmit = async () => {
     const errorMsg = validate();
     if (errorMsg) {
       setInlineError(errorMsg);
-      showAlert('Error', errorMsg);
+      showAlert('שגיאה', errorMsg);
       return;
     }
     setInlineError(null);
 
     try {
       setLoading(true);
-
       const formattedDate = birthDate.toISOString().split('T')[0];
 
       const res = await register({
@@ -112,153 +112,197 @@ export default function RegisterScreen({ navigation }) {
         birthDate: formattedDate,
         phone: phone.trim(),
         address: address.trim(),
-        gender, // Send gender to backend
+        gender,
       });
 
       if (res?.verifyRequired) {
-        showAlert('Almost there', 'A verification code has been sent to your email');
+        showAlert('כמעט סיימנו', 'נשלח אליך קוד אימות במייל');
         navigation.replace('VerifyEmail', { email: email.trim() });
         return;
       }
 
-      showAlert('Registered', 'You can now log in with your credentials');
+      showAlert('נרשמת בהצלחה', 'כעת תוכל להתחבר עם הפרטים שלך');
       navigation.replace('Login');
     } catch (e) {
-      if (e?.response?.data?.errors) {
-        const serverErrors = e.response.data.errors.map(err => `${err.path}: ${err.msg}`).join('\n');
-        setInlineError(serverErrors);
-        showAlert('Registration Error', serverErrors);
-      } else {
-        const serverError =
-          e?.response?.data?.error ||
-          e?.message ||
-          'Registration failed';
-        setInlineError(serverError);
-        showAlert('Registration Error', serverError);
-      }
-      console.log('REGISTER → error', e?.response?.data || e.message);
+      const serverError =
+        e?.response?.data?.error ||
+        e?.message ||
+        'ההרשמה נכשלה';
+      setInlineError(serverError);
+      showAlert('שגיאת הרשמה', serverError);
     } finally {
       setLoading(false);
     }
   };
 
-  // ---------------- RENDER ----------------
   return (
     <SafeAreaView style={{ flex: 1 }}>
-      <ScrollView contentContainerStyle={[styles.container, theme.container]}>
-        <Text style={[styles.title, theme.text]}>Register</Text>
+      <ScrollView
+        contentContainerStyle={[styles.container, theme.container]}
+        showsVerticalScrollIndicator={false}
+        showsHorizontalScrollIndicator={false}
+      >
+        {/* Back button - top left, scrolls away when moving down */}
+        <TouchableOpacity
+          onPress={() => navigation.replace('Login')}
+          style={{ marginBottom: 20, alignSelf: 'flex-start' }}
+        >
+          <Text style={[styles.backText, { color: theme.text.color }]}>
+            חזרה ←
+          </Text>
+        </TouchableOpacity>
+
+        <Text style={[styles.title, theme.text]}>הרשמה</Text>
 
         {/* First name */}
         <Text style={[styles.label, theme.text]}>
-          First Name <Text style={styles.required}>*</Text>
+          שם פרטי <Text style={styles.required}>*</Text>
         </Text>
         <TextInput
           value={firstName}
           onChangeText={setFirstName}
-          placeholder="First name"
+          placeholder="הכנס שם פרטי"
           placeholderTextColor={theme.text.color === '#fff' ? '#aaa' : '#555'}
-          style={[styles.input, { color: theme.text.color }]}
+          style={[styles.input, { color: theme.text.color, textAlign: 'right', writingDirection: 'rtl' }]}
         />
 
         {/* Last name */}
         <Text style={[styles.label, theme.text]}>
-          Last Name <Text style={styles.required}>*</Text>
+          שם משפחה <Text style={styles.required}>*</Text>
         </Text>
         <TextInput
           value={lastName}
           onChangeText={setLastName}
-          placeholder="Last name"
+          placeholder="הכנס שם משפחה"
           placeholderTextColor={theme.text.color === '#fff' ? '#aaa' : '#555'}
-          style={[styles.input, { color: theme.text.color }]}
+          style={[styles.input, { color: theme.text.color, textAlign: 'right', writingDirection: 'rtl' }]}
         />
 
         {/* Gender */}
-        <Text style={[styles.label, theme.text]}>Gender</Text>
-        <Picker
-          selectedValue={gender}
-          onValueChange={(value) => setGender(value)}
-          style={{ marginBottom: 12 }}
-        >
-          <Picker.Item label="Male" value="male" />
-          <Picker.Item label="Female" value="female" />
-          <Picker.Item label="Other" value="other" />
-        </Picker>
+        <Text style={[styles.label, theme.text]}>מין</Text>
+        {Platform.OS === 'web' ? (
+          <select
+            value={gender}
+            onChange={(e) => setGender(e.target.value)}
+            style={{
+              padding: 12,
+              borderRadius: 8,
+              border: '1px solid #ccc',
+              marginBottom: 12,
+              width: '100%',
+              backgroundColor: theme.container.backgroundColor,
+              color: theme.text.color,
+              direction: 'rtl',
+              textAlign: 'right',
+            }}
+          >
+            <option value="male">זכר</option>
+            <option value="female">נקבה</option>
+            <option value="other">אחר</option>
+          </select>
+        ) : (
+          <View style={[styles.pickerWrapper, { backgroundColor: theme.container.backgroundColor }]}>
+            <Picker
+              selectedValue={gender}
+              onValueChange={(value) => setGender(value)}
+              style={[styles.picker, { color: theme.text.color }]}
+              dropdownIconColor={theme.text.color}
+            >
+              <Picker.Item label="זכר" value="male" />
+              <Picker.Item label="נקבה" value="female" />
+              <Picker.Item label="אחר" value="other" />
+            </Picker>
+          </View>
+        )}
 
         {/* Email */}
         <Text style={[styles.label, theme.text]}>
-          Email <Text style={styles.required}>*</Text>
+          אימייל <Text style={styles.required}>*</Text>
         </Text>
         <TextInput
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
           keyboardType="email-address"
-          placeholder="Email"
+          placeholder="הכנס כתובת אימייל"
           placeholderTextColor={theme.text.color === '#fff' ? '#aaa' : '#555'}
-          style={[styles.input, { color: theme.text.color }]}
+          style={[styles.input, { color: theme.text.color, textAlign: 'right', writingDirection: 'rtl' }]}
         />
 
         {/* Password */}
         <Text style={[styles.label, theme.text]}>
-          Password <Text style={styles.required}>*</Text>
+          סיסמה <Text style={styles.required}>*</Text>
         </Text>
         <TextInput
           value={password}
           onChangeText={setPassword}
           secureTextEntry
-          placeholder="Password (6+ characters)"
+          placeholder="סיסמה (לפחות 6 תווים)"
           placeholderTextColor={theme.text.color === '#fff' ? '#aaa' : '#555'}
-          style={[styles.input, { color: theme.text.color }]}
+          style={[styles.input, { color: theme.text.color, textAlign: 'right', writingDirection: 'rtl' }]}
         />
 
         {/* Phone */}
         <Text style={[styles.label, theme.text]}>
-          Phone <Text style={styles.required}>*</Text>
+          טלפון <Text style={styles.required}>*</Text>
         </Text>
         <TextInput
           value={phone}
           onChangeText={setPhone}
           keyboardType="phone-pad"
-          placeholder="Phone number"
+          placeholder="מספר טלפון"
           placeholderTextColor={theme.text.color === '#fff' ? '#aaa' : '#555'}
-          style={[styles.input, { color: theme.text.color }]}
+          style={[styles.input, { color: theme.text.color, textAlign: 'right', writingDirection: 'rtl' }]}
         />
 
-        {/* Address (optional) */}
-        <Text style={[styles.label, theme.text]}>Address</Text>
+        {/* Address */}
+        <Text style={[styles.label, theme.text]}>כתובת</Text>
         <TextInput
           value={address}
           onChangeText={setAddress}
-          placeholder="Address (optional)"
+          placeholder="כתובת (לא חובה)"
           placeholderTextColor={theme.text.color === '#fff' ? '#aaa' : '#555'}
-          style={[styles.input, { color: theme.text.color }]}
+          style={[styles.input, { color: theme.text.color, textAlign: 'right', writingDirection: 'rtl' }]}
         />
 
         {/* Birthdate */}
         <Text style={[styles.label, theme.text]}>
-          Birth Date <Text style={styles.required}>*</Text>
+          תאריך לידה <Text style={styles.required}>*</Text>
         </Text>
-        <DatePicker date={birthDate} setDate={setBirthDate} />
+        <DatePicker date={birthDate} setDate={setBirthDate} theme={theme} />
 
         {/* Inline error */}
         {inlineError ? <Text style={{ color: 'red', marginBottom: 12 }}>{inlineError}</Text> : null}
 
         {/* Submit */}
-        <Button title={loading ? '...' : 'Register'} onPress={onSubmit} disabled={loading} />
+        <Button title={loading ? '...' : 'הרשמה'} onPress={onSubmit} disabled={loading} />
 
         <View style={{ height: 8 }} />
 
         {/* Link to login */}
-        <Button title="Already have an account? Login" onPress={() => navigation.navigate('Login')} />
+        <Button
+          title="כבר יש לך חשבון? התחבר"
+          onPress={() => navigation.navigate('Login')}
+        />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, padding: 24 },
-  title: { fontSize: 24, fontWeight: '600', marginBottom: 8 },
-  label: { fontSize: 14, marginBottom: 4 },
+  container: { flexGrow: 1, padding: 24, direction: 'rtl' },
+  title: { fontSize: 24, fontWeight: '600', marginBottom: 8, textAlign: 'center' },
+  label: { fontSize: 14, marginBottom: 4, textAlign: 'right' },
   required: { color: 'red' },
   input: { borderWidth: 1, borderRadius: 8, padding: 12, marginBottom: 12 },
+  pickerWrapper: {
+    borderWidth: 1,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  picker: {
+    height: 50,
+    width: '100%',
+  },
+  backText: { fontSize: 18, fontWeight: '500', textAlign: 'left' }, // 👈 מיושר שמאלה
 });

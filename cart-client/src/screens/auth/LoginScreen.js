@@ -1,12 +1,22 @@
 import React, { useState } from 'react';
 import {
-  View, Text, TextInput, Button, Alert, Platform, Switch, StyleSheet, TouchableOpacity
+  View,
+  Text,
+  TextInput,
+  Button,
+  Alert,
+  Platform,
+  Switch,
+  StyleSheet,
+  TouchableOpacity,
 } from 'react-native';
 import { login } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 
-const show = (t, m) => (Platform.OS === 'web' ? window.alert(`${t}\n${m}`) : Alert.alert(t, m));
+// Cross-platform alert helper
+const show = (t, m) =>
+  Platform.OS === 'web' ? window.alert(`${t}\n${m}`) : Alert.alert(t, m);
 
 export default function LoginScreen({ navigation }) {
   const { signIn } = useAuth();
@@ -17,6 +27,7 @@ export default function LoginScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [remember, setRemember] = useState(false);
 
+  // Handle login submission
   const onSubmit = async () => {
     try {
       setLoading(true);
@@ -26,76 +37,82 @@ export default function LoginScreen({ navigation }) {
       const status = e?.response?.status;
       const payload = e?.response?.data;
 
-      // 👇 החלק הזה שחשוב להחזיר
       if (status === 403 && payload?.verifyRequired) {
         show(
-          'Verification required',
-          'Your email is not verified. Please enter the code sent to you.'
+          'נדרש אימות',
+          'המייל שלך לא אומת. אנא הזן את הקוד שנשלח אליך.'
         );
         navigation.replace('VerifyEmail', { email: payload.email || email.trim() });
         return;
       }
 
-      show('Login failed', payload?.error || 'Unknown error');
+      show('התחברות נכשלה', payload?.error || 'שגיאה לא ידועה');
     } finally {
       setLoading(false);
     }
   };
 
-
-
   return (
     <View style={[styles.container, theme.container]}>
-      <Text style={[styles.title, theme.text]}>Login</Text>
+      <Text style={[styles.title, theme.text]}>התחברות</Text>
 
-      {/* Email input */}
+      {/* Email input → force LTR */}
       <TextInput
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
         keyboardType="email-address"
-        placeholder="Email"
+        placeholder="אימייל"
         placeholderTextColor={theme.text.color === '#fff' ? '#aaa' : '#555'}
-        style={[styles.input, { color: theme.text.color }]}
+        style={[
+          styles.input,
+          { color: theme.text.color, textAlign: 'left', writingDirection: 'ltr' },
+        ]}
       />
 
-      {/* Password input */}
+      {/* Password input → force LTR */}
       <TextInput
         value={password}
         onChangeText={setPassword}
         secureTextEntry
-        placeholder="Password"
+        placeholder="סיסמה"
         placeholderTextColor={theme.text.color === '#fff' ? '#aaa' : '#555'}
-        style={[styles.input, { color: theme.text.color }]}
+        style={[
+          styles.input,
+          { color: theme.text.color, textAlign: 'left', writingDirection: 'ltr' },
+        ]}
       />
 
       {/* Remember Me toggle */}
       <View style={styles.rememberRow}>
         <Switch value={remember} onValueChange={setRemember} />
-        <Text style={[styles.rememberText, theme.text]}>Remember Me</Text>
+        <Text style={[styles.rememberText, theme.text]}>זכור אותי</Text>
       </View>
 
       {/* Login button */}
-      <Button title={loading ? '...' : 'Login'} onPress={onSubmit} disabled={loading} />
+      <Button title={loading ? '...' : 'התחבר'} onPress={onSubmit} disabled={loading} />
 
       <View style={{ height: 8 }} />
 
       {/* Register link */}
-      <Button title="Don't have an account? Register" onPress={() => navigation.navigate('Register')} />
+      <Button
+        title="אין לך חשבון? הירשם"
+        onPress={() => navigation.navigate('Register')}
+      />
 
       {/* Forgot Password link */}
       <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
-        <Text style={[styles.forgotText, theme.text]}>Forgot Password?</Text>
+        <Text style={[styles.forgotText, theme.text]}>שכחת סיסמה?</Text>
       </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, justifyContent: 'center', gap: 12 },
-  title: { fontSize: 24, fontWeight: '600', marginBottom: 8 },
+  container: { flex: 1, padding: 24, justifyContent: 'center', gap: 12, direction: 'rtl' },
+  title: { fontSize: 24, fontWeight: '600', marginBottom: 8, textAlign: 'center' },
   input: { borderWidth: 1, borderRadius: 8, padding: 12, marginBottom: 12 },
   rememberRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   rememberText: { marginLeft: 8, fontSize: 16 },
-  forgotText: { marginTop: 16, textAlign: 'center', fontSize: 14, textDecorationLine: 'underline' }
+  forgotText: { marginTop: 16, textAlign: 'center', fontSize: 14, textDecorationLine: 'underline' },
 });

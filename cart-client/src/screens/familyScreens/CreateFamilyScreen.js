@@ -8,20 +8,21 @@ import { useAuth } from '../../context/AuthContext';
 import * as ImagePicker from 'expo-image-picker';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { BASE_URL } from '../../api/client';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 
 export default function CreateFamilyScreen({ navigation }) {
-  const { theme } = useTheme();
-  const { token } = useAuth();
+  const { theme, darkMode } = useTheme(); // Use theme and darkMode from context
+  const { token } = useAuth(); // Get auth token from context
+  const queryClient = useQueryClient();
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [avatar, setAvatar] = useState(null); // Preview URI
-  const [fileObj, setFileObj] = useState(null); // File object for web
-  const [success, setSuccess] = useState(false);
+  const [avatar, setAvatar] = useState(null); // Local preview URI for mobile/web
+  const [fileObj, setFileObj] = useState(null); // File object for web uploads
   const [err, setErr] = useState('');
 
-  // ---------------- PICK IMAGE (Mobile only) ----------------
+  // --- Image picker (mobile only) ---
   const pickImage = async () => {
     if (Platform.OS === 'web') return;
 
@@ -33,26 +34,21 @@ export default function CreateFamilyScreen({ navigation }) {
     });
 
     if (!result.canceled) {
-      const uri = result.assets[0].uri;
-      setAvatar(uri);
-      setFileObj(null); 
+      setAvatar(result.assets[0].uri);
+      setFileObj(null);
     }
   };
 
-  // ---------------- CREATE FAMILY ----------------
-  const handleCreate = async () => {
-    setErr('');
-    if (!name.trim()) {
-      setErr('Family name is required.');
-      return;
-    }
+  // --- Mutation for creating a new family ---
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      if (!name.trim()) throw new Error("Family name is required.");
 
-    try {
       const formData = new FormData();
       formData.append('name', name.trim());
       if (description.trim()) formData.append('description', description.trim());
 
-      // Handle file upload differently for web vs. mobile
+      // Handle image upload differently for Web vs Mobile
       if (Platform.OS === 'web' && fileObj) {
         formData.append('avatar', fileObj);
       } else if (avatar && Platform.OS !== 'web') {
@@ -70,40 +66,35 @@ export default function CreateFamilyScreen({ navigation }) {
         },
       });
 
-      if (res.data.family) {
+      return res.data;
+    },
+    onSuccess: (data) => {
+      if (data.family) {
+        // Reset form state after successful creation
         setName('');
         setDescription('');
         setAvatar(null);
         setFileObj(null);
-        setSuccess(true);
-      } else {
-        setErr(res.data.error || 'Failed to create family.');
+
+        // Refresh families & carts lists
+        queryClient.invalidateQueries(['families']);
+        queryClient.invalidateQueries(['carts']);
+
+        Alert.alert("הצלחה", "המשפחה נוצרה בהצלחה");
+        navigation.goBack();
       }
-    } catch (e) {
-      console.error('❌ Create family failed:', e.response?.data || e.message);
-      Alert.alert('Error', e.response?.data?.error || 'Failed to create family');
-    }
-  };
+    },
+    onError: (e) => {
+      console.error("❌ Create family failed:", e.response?.data || e.message);
+      Alert.alert("שגיאה", e.response?.data?.error || e.message);
+    },
+  });
 
-  // ---------------- SUCCESS VIEW ----------------
-  if (success) {
-    return (
-      <View style={[styles.container, theme.container]}>
-        <Text style={[styles.success, { color: '#2e7d32' }]}>
-          Created successfully
-        </Text>
-        <View style={{ height: 10 }} />
-        <Button title="Back" onPress={() => navigation.goBack()} />
-      </View>
-    );
-  }
-
-  // ---------------- FORM VIEW ----------------
   return (
     <View style={[styles.container, theme.container]}>
-      <Text style={[styles.title, theme.text]}>Create family</Text>
+      <Text style={[styles.title, theme.text]}>צור משפחה</Text>
 
-      {/* Family avatar picker with camera overlay */}
+      {/* Family avatar picker */}
       <View style={styles.imageWrapper}>
         <TouchableOpacity
           onPress={() => {
@@ -122,13 +113,12 @@ export default function CreateFamilyScreen({ navigation }) {
               <Icon name="people-outline" size={36} color="#666" />
             </View>
           )}
-
           <View style={styles.cameraIconWrapper}>
             <Icon name="camera" size={20} color="#fff" />
           </View>
         </TouchableOpacity>
 
-        {/* Hidden input for web */}
+        {/* Hidden file input for Web */}
         {Platform.OS === 'web' && (
           <input
             id="avatarInput"
@@ -148,8 +138,11 @@ export default function CreateFamilyScreen({ navigation }) {
 
       {/* Family name input */}
       <TextInput
-        style={[styles.input, { color: theme.text.color, borderColor: '#ccc' }]}
-        placeholder="Family name (required)"
+        style={[
+          styles.input, 
+          { color: theme.text.color, borderColor: '#ccc', textAlign: "right" } // RTL alignment
+        ]}
+        placeholder="שם משפחה (חובה)"
         placeholderTextColor={theme.text.color === '#fff' ? '#aaa' : '#555'}
         value={name}
         onChangeText={setName}
@@ -157,8 +150,11 @@ export default function CreateFamilyScreen({ navigation }) {
 
       {/* Family description input */}
       <TextInput
-        style={[styles.textArea, { color: theme.text.color, borderColor: '#ccc' }]}
-        placeholder="Family description (optional)"
+        style={[
+          styles.textArea, 
+          { color: theme.text.color, borderColor: '#ccc', textAlign: "right" } // RTL alignment
+        ]}
+        placeholder="תיאור המשפחה (אופציונלי)"
         placeholderTextColor={theme.text.color === '#fff' ? '#aaa' : '#555'}
         value={description}
         onChangeText={setDescription}
@@ -166,8 +162,22 @@ export default function CreateFamilyScreen({ navigation }) {
         numberOfLines={4}
       />
 
-      <Button title="Create" onPress={handleCreate} />
+      <Button
+        title={createMutation.isLoading ? "יוצר..." : "צור"}
+        onPress={() => createMutation.mutate()}
+        disabled={createMutation.isLoading}
+      />
+
       {err ? <Text style={styles.error}>{err}</Text> : null}
+
+      {/* Back button placed at the bottom-left */}
+      <TouchableOpacity 
+        style={styles.backButton} 
+        onPress={() => navigation.goBack()}
+      >
+        <Icon name="arrow-back" size={22} color="#fff" />
+        <Text style={styles.backText}>חזור</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -175,7 +185,12 @@ export default function CreateFamilyScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16 },
   title: { fontSize: 22, fontWeight: '700', marginBottom: 12, textAlign: 'center' },
-  input: { borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 12, textAlign: 'left' },
+  input: { 
+    borderWidth: 1, 
+    borderRadius: 10, 
+    padding: 12, 
+    marginBottom: 12 
+  },
   textArea: {
     borderWidth: 1,
     borderRadius: 10,
@@ -206,6 +221,21 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#fff',
   },
-  success: { fontSize: 18, fontWeight: '700', textAlign: 'center' },
   error: { marginTop: 8, color: '#c62828', textAlign: 'center' },
+  backButton: {
+    position: "absolute",
+    bottom: 20,
+    left: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#4caf50",
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+  },
+  backText: {
+    color: "#fff",
+    fontSize: 16,
+    marginLeft: 6,
+  },
 });

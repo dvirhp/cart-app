@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,16 +11,16 @@ import {
   SafeAreaView,
   Alert,
   Platform,
+  I18nManager
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
-import { updateProfile, BASE_URL } from '../../api/client';
-import { deleteAccount } from '../../api/client';
+import { updateProfile, BASE_URL, deleteAccount } from '../../api/client';
 
-/* ---------- Helper to format today's date (for validation) ---------- */
+/* --- Helper to format today's date (for validation) --- */
 function todayStr() {
   const d = new Date();
   const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -34,7 +34,17 @@ export default function AccountManagerScreen({ navigation }) {
 
   const [avatar, setAvatar] = useState(user?.avatar || null);
 
-  /* ---------- Initialize profile fields from user object ---------- */
+  // ✅ Sync header style with theme
+  useEffect(() => {
+    navigation.setOptions({
+      headerStyle: { backgroundColor: theme.container.backgroundColor },
+      headerTintColor: theme.text.color,
+      headerTitleStyle: { fontWeight: 'bold' },
+      title: 'ניהול חשבון',
+    });
+  }, [navigation, theme]);
+
+  /* --- Initialize profile fields from user --- */
   const initial = useMemo(() => ({
     firstName: user?.firstName || '',
     lastName:  user?.lastName  || '',
@@ -50,12 +60,11 @@ export default function AccountManagerScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [showSaved, setShowSaved] = useState(false);
 
-  // Handle input change for a given field
   const handleChange = (field, value) => {
     setFields((prev) => ({ ...prev, [field]: value }));
   };
 
-  /* ---------- Avatar upload handler ---------- */
+  /* --- Avatar upload handler --- */
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -66,18 +75,16 @@ export default function AccountManagerScreen({ navigation }) {
 
     if (!result.canceled) {
       const uri = result.assets[0].uri;
-      setAvatar(uri); // Show preview immediately
+      setAvatar(uri);
 
       try {
         const formData = new FormData();
 
         if (Platform.OS === 'web') {
-          // Web: convert URI to Blob
           const response = await fetch(uri);
           const blob = await response.blob();
           formData.append('avatar', blob, 'avatar.jpg');
         } else {
-          // Mobile: send file object with metadata
           formData.append('avatar', {
             uri: Platform.OS === 'ios' ? uri.replace('file://', '') : uri,
             type: 'image/jpeg',
@@ -87,78 +94,77 @@ export default function AccountManagerScreen({ navigation }) {
 
         const res = await fetch(`${BASE_URL}/api/v1/auth/upload-avatar`, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${token}` }, // Content-Type is handled automatically
+          headers: { Authorization: `Bearer ${token}` },
           body: formData,
         });
 
-        // Parse response (handle non-JSON errors gracefully)
         const text = await res.text();
         let data;
         try {
           data = JSON.parse(text);
         } catch {
-          console.error("❌ Server returned non-JSON:", text);
+          console.error("❌ Non-JSON server response:", text);
           throw new Error("Invalid server response");
         }
 
         if (data?.user) {
           updateUser(data.user);
           setAvatar(data.user.avatar);
-          Alert.alert('✅ Success', 'Profile picture updated');
+          Alert.alert('✅ הצלחה', 'תמונת הפרופיל עודכנה בהצלחה');
         } else {
-          Alert.alert('Error', data?.error || 'Upload failed');
+          Alert.alert('שגיאה', data?.error || 'העלאה נכשלה');
         }
       } catch (err) {
         console.error('❌ Avatar upload failed:', err);
-        Alert.alert('Error', 'Failed to update profile picture');
+        Alert.alert('שגיאה', 'שגיאה בעדכון תמונת פרופיל');
       }
     }
   };
 
-  /* ---------- Account deletion handler ---------- */
+  /* --- Account deletion handler --- */
   const handleDelete = async () => {
     if (Platform.OS === 'web') {
       const confirmed = window.confirm(
-        'Are you sure you want to delete your account? This action cannot be undone.'
+        'האם אתה בטוח שברצונך למחוק את החשבון? פעולה זו אינה ניתנת לביטול.'
       );
       if (!confirmed) return;
 
       try {
         const res = await deleteAccount(token);
         if (res?.success) {
-          alert('✅ Deleted: Your account has been deleted');
+          alert('✅ החשבון נמחק בהצלחה');
           await signOut();
         } else {
-          alert('Error: ' + (res?.error || 'Failed to delete account'));
+          alert('שגיאה: ' + (res?.error || 'מחיקה נכשלה'));
         }
       } catch (err) {
         console.error('❌ Delete error:', err);
-        alert('Server error while deleting account');
+        alert('שגיאת שרת בעת מחיקה');
       }
     } else {
       Alert.alert(
-        'Delete Account',
-        'Are you sure you want to delete your account? This action cannot be undone.',
+        'מחיקת חשבון',
+        'האם אתה בטוח שברצונך למחוק את החשבון? פעולה זו אינה ניתנת לביטול.',
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: 'ביטול', style: 'cancel' },
           {
-            text: 'Yes, Delete',
+            text: 'כן, מחק',
             style: 'destructive',
             onPress: async () => {
               try {
                 const res = await deleteAccount(token);
                 if (res?.success) {
-                  Alert.alert('✅ Deleted', 'Your account has been deleted');
+                  Alert.alert('✅ נמחק', 'החשבון שלך נמחק בהצלחה');
                   navigation.reset({
                     index: 0,
                     routes: [{ name: 'Login' }],
                   });
                 } else {
-                  Alert.alert('Error', res?.error || 'Failed to delete account');
+                  Alert.alert('שגיאה', res?.error || 'מחיקה נכשלה');
                 }
               } catch (err) {
                 console.error('❌ Delete error:', err);
-                Alert.alert('Error', 'Server error while deleting account');
+                Alert.alert('שגיאה', 'שגיאת שרת בעת מחיקה');
               }
             },
           },
@@ -167,7 +173,6 @@ export default function AccountManagerScreen({ navigation }) {
     }
   };
 
-  /* ---------- Check if profile fields have changed ---------- */
   const isChanged = () =>
     fields.firstName !== original.firstName ||
     fields.lastName  !== original.lastName  ||
@@ -176,14 +181,13 @@ export default function AccountManagerScreen({ navigation }) {
     fields.address   !== original.address   ||
     (fields.birthDate || '') !== (original.birthDate || '');
 
-  /* ---------- Save profile changes ---------- */
+  /* --- Save profile changes --- */
   const handleSave = async () => {
     try {
       setLoading(true);
 
-      // Validate birthdate format
       if (fields.birthDate && !/^\d{4}-\d{2}-\d{2}$/.test(fields.birthDate)) {
-        Alert.alert('Error', 'Invalid date format. Required: YYYY-MM-DD');
+        Alert.alert('שגיאה', 'תאריך לא תקין. פורמט נדרש: YYYY-MM-DD');
         return;
       }
 
@@ -204,30 +208,30 @@ export default function AccountManagerScreen({ navigation }) {
       }
       updateUser(res.user);
 
-      Alert.alert('✅ Success', 'Profile updated successfully');
+      Alert.alert('✅ הצלחה', 'הפרופיל עודכן בהצלחה');
       setShowSaved(true);
       setTimeout(() => setShowSaved(false), 2000);
     } catch (e) {
       console.error('❌ Update error:', e?.response?.data || e.message);
-      Alert.alert('Error', e?.response?.data?.error || 'Update failed');
+      Alert.alert('שגיאה', e?.response?.data?.error || 'עדכון נכשל');
     } finally {
       setLoading(false);
     }
   };
 
-  /* ---------- Render a single profile field row ---------- */
+  /* --- Render profile field row --- */
   const renderField = (label, field, secure = false) => {
     if (field === 'birthDate') {
-      // Special handling for birthdate (Date picker on mobile / <input type="date" /> on web)
       return (
         <View style={styles.fieldRow} key={field}>
           <Text style={[styles.label, theme.text]}>{label}</Text>
           <View style={styles.inputWrapper}>
             <Text style={[styles.input, { color: editing[field] ? theme.text.color : '#999' }]}>
-              {fields.birthDate || 'YYYY-MM-DD'}
+              {fields.birthDate || 'תאריך לידה (YYYY-MM-DD)'}
             </Text>
             <TouchableOpacity
               onPress={() => setEditing((prev) => ({ ...prev, [field]: !prev[field] }))}
+              style={styles.editIcon} // ✅ edit button far left
             >
               <Icon name="pencil" size={20} color={theme.text.color} />
             </TouchableOpacity>
@@ -247,6 +251,7 @@ export default function AccountManagerScreen({ navigation }) {
                   borderColor: '#ccc',
                   borderStyle: 'solid',
                   borderRadius: 8,
+                  direction: 'rtl',
                   color: '#111',
                   backgroundColor: 'white',
                 }}
@@ -272,7 +277,6 @@ export default function AccountManagerScreen({ navigation }) {
       );
     }
 
-    // Default handling for text fields
     return (
       <View style={styles.fieldRow} key={field}>
         <Text style={[styles.label, theme.text]}>{label}</Text>
@@ -282,13 +286,20 @@ export default function AccountManagerScreen({ navigation }) {
             onChangeText={(v) => handleChange(field, v)}
             editable={!!editing[field]}
             secureTextEntry={secure}
+            placeholder={`הכנס ${label}`}
+            placeholderTextColor="#999"
             style={[
               styles.input,
-              { color: editing[field] ? theme.text.color : '#999' },
+              { 
+                color: editing[field] ? theme.text.color : '#999',
+                textAlign: 'right',
+                direction: 'rtl' 
+              },
             ]}
           />
           <TouchableOpacity
             onPress={() => setEditing((prev) => ({ ...prev, [field]: !prev[field] }))}
+            style={styles.editIcon} // ✅ edit button far left
           >
             <Icon name="pencil" size={20} color={theme.text.color} />
           </TouchableOpacity>
@@ -297,23 +308,20 @@ export default function AccountManagerScreen({ navigation }) {
     );
   };
 
-  /* ---------- Render UI ---------- */
   return (
     <SafeAreaView style={[styles.container, theme.container]}>
-      {/* Save confirmation banner */}
       {showSaved && (
         <View style={styles.savedBanner}>
-          <Text style={{ color: 'white', fontWeight: '600' }}>Saved ✔</Text>
+          <Text style={{ color: 'white', fontWeight: '600' }}>נשמר ✔</Text>
         </View>
       )}
 
-      {/* Back button */}
-      <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-        <Icon name="arrow-back" size={24} color={theme.text.color} />
-      </TouchableOpacity>
-
-      <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
-        {/* Avatar section */}
+      <ScrollView 
+        contentContainerStyle={{ paddingBottom: 100 }}
+        showsVerticalScrollIndicator={false}
+        showsHorizontalScrollIndicator={false}
+      >
+        {/* Avatar */}
         <View style={styles.profileSection}>
           <TouchableOpacity onPress={pickImage} style={{ position: 'relative' }}>
             {avatar ? (
@@ -330,17 +338,17 @@ export default function AccountManagerScreen({ navigation }) {
         </View>
 
         {/* Profile fields */}
-        {renderField('First Name', 'firstName')}
-        {renderField('Last Name', 'lastName')}
-        {renderField('Email', 'email')}
-        {renderField('Phone', 'phone')}
-        {renderField('Address', 'address')}
-        {renderField('Birth Date', 'birthDate')}
+        {renderField('שם פרטי', 'firstName')}
+        {renderField('שם משפחה', 'lastName')}
+        {renderField('אימייל', 'email')}
+        {renderField('טלפון', 'phone')}
+        {renderField('כתובת', 'address')}
+        {renderField('תאריך לידה', 'birthDate')}
 
-        {/* Save changes */}
+        {/* Save */}
         <View style={{ marginTop: 24, marginHorizontal: 24 }}>
           <Button
-            title={loading ? 'Saving...' : 'Save Changes'}
+            title={loading ? 'שומר...' : 'שמור שינויים'}
             onPress={handleSave}
             disabled={loading || !isChanged()}
           />
@@ -349,7 +357,7 @@ export default function AccountManagerScreen({ navigation }) {
         {/* Change password */}
         <View style={{ marginTop: 12, marginHorizontal: 24 }}>
           <Button
-            title="Change Password"
+            title="שנה סיסמה"
             onPress={() => navigation.navigate('ChangePassword')}
             color="#d9534f"
           />
@@ -358,7 +366,7 @@ export default function AccountManagerScreen({ navigation }) {
         {/* Delete account */}
         <View style={{ marginTop: 12, marginHorizontal: 24 }}>
           <Button
-            title="Delete Account"
+            title="מחק חשבון"
             onPress={handleDelete}
             color="#b22222"
           />
@@ -368,10 +376,9 @@ export default function AccountManagerScreen({ navigation }) {
   );
 }
 
-/* ---------- Styles ---------- */
+/* --- Styles --- */
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  backButton: { padding: 16, alignSelf: 'flex-start' },
+  container: { flex: 1, direction: 'rtl' },
   profileSection: { alignItems: 'center', marginVertical: 16 },
   avatar: { width: 120, height: 120, borderRadius: 60, backgroundColor: '#ddd' },
   editBadge: {
@@ -383,9 +390,9 @@ const styles = StyleSheet.create({
     padding: 6,
   },
   fieldRow: { marginBottom: 16, paddingHorizontal: 24 },
-  label: { marginBottom: 6, fontSize: 14 },
+  label: { marginBottom: 6, fontSize: 14, textAlign: 'right' },
   inputWrapper: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse', // ✅ pencil moves to far left
     alignItems: 'center',
     borderWidth: 1,
     borderRadius: 8,
@@ -393,6 +400,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   input: { flex: 1, padding: 10 },
+  editIcon: {
+    marginLeft: 'auto', // ✅ ensures pencil is fully left
+    paddingHorizontal: 6,
+  },
   savedBanner: {
     position: 'absolute',
     top: 8,

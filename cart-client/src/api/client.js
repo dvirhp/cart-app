@@ -51,14 +51,22 @@ export async function updateProfile(token, payload) {
 }
 
 export async function changePassword(token, payload) {
-  const { data } = await api.post('/auth/change-password', payload, {
-    headers: { 
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json'
+  try {
+    const { data } = await api.post('/auth/change-password', payload, {
+      headers: { 
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    return data; // { success: true }
+  } catch (err) {
+    if (err.response?.data) {
+      return err.response.data;
     }
-  });
-  return data; // Expected: { success: true }
+    return { error: 'שגיאת שרת' };
+  }
 }
+
 
 // ---------------- AVATAR ----------------
 export async function uploadAvatar(token, uri) {
@@ -111,3 +119,61 @@ export async function deleteAccount(token) {
     throw err.response?.data || { error: 'Server error' };
   }
 }
+
+
+
+// ---------------- PRICES ----------------
+
+// 🟢 Get prices by barcode (מחירים לפי ברקוד)
+export async function fetchPricesByBarcode(barcode) {
+  try {
+      console.log("📞 fetchPricesByBarcode called with:", barcode);
+
+    const url = `${API_BASE_URL}/prices/${barcode}`;
+    console.log("🌍 Fetching prices from:", url);
+
+    const res = await fetch(url);
+    console.log("📡 Response status:", res.status);
+
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+
+    const data = await res.json();
+    console.log("📦 Data received:", data);
+
+    return data;
+  } catch (err) {
+    console.error("❌ fetchPricesByBarcode failed:", err.message);
+    throw err;
+  }
+}
+
+
+// 🟢 Get prices by productId (מחירים לפי מזהה מוצר ב־Mongo)
+export async function fetchPricesByProductId(productId) {
+  const { data } = await api.get(`/prices/by-product/${productId}`);
+  return data; // array of Price docs
+}
+
+// 🟢 Get all prices (זהירות – יכול להיות כבד)
+export async function fetchAllPrices() {
+  const { data } = await api.get(`/prices`);
+  return data; // array of all prices
+}
+
+// 🟢 Get prices by product name
+export async function fetchPricesByName(name) {
+  try {
+    console.log("🔍 fetchPricesByName called with:", name);
+
+    const { data } = await api.get(`/price/by-name/${encodeURIComponent(name)}`);
+    console.log("📦 fetchPricesByName data:", data);
+
+    return data.prices || [];
+  } catch (err) {
+    console.error("❌ fetchPricesByName error:", err.response?.data || err.message);
+    throw err.response?.data || { error: "Server error" };
+  }
+}
+
