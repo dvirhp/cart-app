@@ -1,14 +1,13 @@
-import React from 'react';
-import { StyleSheet } from 'react-native';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import React from "react";
+import { StyleSheet } from "react-native";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
-import RootNavigator from './src/navigation';
-import { AuthProvider } from './src/context/AuthContext';
-import { ThemeProvider } from './src/context/ThemeContext';
-import { ActiveCartProvider } from './src/context/ActiveCartContext';
+import RootNavigator from "./src/navigation/RootNavigator";
+import { AuthProvider } from "./src/context/AuthContext";
+import { ThemeProvider } from "./src/context/ThemeContext";
+import { ActiveCartProvider } from "./src/context/ActiveCartContext";
 
-// Initialize React Query client (used for server state management)
 const qc = new QueryClient();
 
 export default function App() {
@@ -18,8 +17,7 @@ export default function App() {
         <ActiveCartProvider>
           <QueryClientProvider client={qc}>
             <SafeAreaProvider>
-              {/* Ensure SafeAreaView covers the top edge to avoid layout issues with status bar */}
-              <SafeAreaView style={styles.container} edges={['top']}>
+              <SafeAreaView style={styles.container} edges={["top"]}>
                 <RootNavigator />
               </SafeAreaView>
             </SafeAreaProvider>
@@ -31,7 +29,5 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1, // Fill entire screen
-  },
+  container: { flex: 1 },
 });
